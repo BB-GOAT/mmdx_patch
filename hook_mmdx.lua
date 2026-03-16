@@ -123,6 +123,19 @@ AddGamePostInit(function()
                 if aimbox then
                     local buffaction = BufferedAction(ThePlayer, aimbox, ACTIONS.STORE)
                     ThePlayer.components.playercontroller:RemoteControllerUseItemOnSceneFromInvTile(buffaction, item) -- 作为服务器时这个函数无效
+                elseif MOD_RPC["FINDER_REDUX"] and MOD_RPC["FINDER_REDUX"]["FIND"] then -- 兼容高亮查找 - Finder
+                    SendModRPCToServer(MOD_RPC["FINDER_REDUX"]["FIND"], item.prefab)
+                    ThePlayer:DoTaskInTime(0.1, function()
+                        local FINDER_REDUX_HIGHLIGHT_id = table.typecheckedgetfield(CLIENT_MOD_RPC, "number", "FINDER_REDUX", "HIGHLIGHT", "id")
+                        if FINDER_REDUX_HIGHLIGHT_id then
+                            local HIGHLITED_ENTS = Upvaluehelper.GetUpvalue(CLIENT_MOD_RPC_HANDLERS["FINDER_REDUX"][FINDER_REDUX_HIGHLIGHT_id], "HIGHLITED_ENTS")
+                            local aimbox = HIGHLITED_ENTS and HIGHLITED_ENTS[1]
+                            if aimbox then
+                                local buffaction = BufferedAction(ThePlayer, aimbox, ACTIONS.STORE)
+                                ThePlayer.components.playercontroller:RemoteControllerUseItemOnSceneFromInvTile(buffaction, item) -- 作为服务器时这个函数无效
+                            end
+                        end
+                    end)
                 end
             end
         end
