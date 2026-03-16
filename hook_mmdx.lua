@@ -21,12 +21,14 @@ AddGamePostInit(function()
     end
     ---------------------------------------------------------------------------------------------------------------------------------------------------------
 
-    -- 检测是否开启Show Me 或 Insight
-    local enabled_showme_or_insight = _G.KnownModIndex:IsModEnabledAny("workshop-2189004162") or _G.KnownModIndex:IsModEnabledAny("workshop-2287303119") or _G.KnownModIndex:IsModEnabledAny("workshop-666155465")
+    -- 检测是否开启其它高亮显示相同物品模组
+    local enabled_other_highlight_mod = _G.KnownModIndex:IsModEnabledAny("workshop-2189004162")
+                                        or MOD_RPC.ShowMeSHint
+                                        or MOD_RPC.FINDER_REDUX
 
     --------------------------------------------------- 高亮显示功能防冲突 ---------------------------------------------------
 
-    if enabled_showme_or_insight and Memory.HighlightBox then
+    if enabled_other_highlight_mod and Memory.HighlightBox then
         Memory.HighlightBox = function() end
     end
 
