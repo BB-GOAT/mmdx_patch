@@ -14,147 +14,148 @@ AddComponentPostInit("playercontroller", function(self, inst)
                 for k in pairs(event) do
                     local data = debug.getinfo(k.fn, "S")
                     if string.match(data.source, "mods/workshop%-2111412487/main/util.lua") then
-
-                        local function GetHandsEquip() -- 获取手部装备的物品
-                            return ThePlayer and
-                            ThePlayer.replica.inventory and
-                            EQUIPSLOTS.HANDS and
-                            ThePlayer.replica.inventory:GetEquippedItem(EQUIPSLOTS.HANDS)
-                        end
-
                         local func = Upvaluehelper.GetUpvalue(k.fn, "func")
-                        local new_func = function()
-                            local working_thread = Upvaluehelper.GetUpvalue(func, "working_thread")
-                            local WAGSTAFF_RANGE = Upvaluehelper.GetUpvalue(func, "WAGSTAFF_RANGE")
-                            local find_wagstaff = Upvaluehelper.GetUpvalue(func, "find_wagstaff")
-                            local target_mark = Upvaluehelper.GetUpvalue(func, "target_mark")
-                            local GetTool = Upvaluehelper.GetUpvalue(func, "GetTool")
-                            local Util = Upvaluehelper.GetUpvalue(func, "Util")
-                            local SLEEP_TIME = Upvaluehelper.GetUpvalue(func, "SLEEP_TIME")
-                            local Stop = Upvaluehelper.GetUpvalue(func, "Stop")
+                        if func and string.match(debug.getinfo(func).source or "", "wagstaff_tool_giver.lua") then
+                            local function GetHandsEquip() -- 获取手部装备的物品
+                                return ThePlayer and
+                                ThePlayer.replica.inventory and
+                                EQUIPSLOTS.HANDS and
+                                ThePlayer.replica.inventory:GetEquippedItem(EQUIPSLOTS.HANDS)
+                            end
 
-                            Upvaluehelper.SetUpvalue(GetTool, ActionQueuer, "ActionQueuer")
+                            local new_func = function()
+                                local working_thread = Upvaluehelper.GetUpvalue(func, "working_thread")
+                                local WAGSTAFF_RANGE = Upvaluehelper.GetUpvalue(func, "WAGSTAFF_RANGE")
+                                local find_wagstaff = Upvaluehelper.GetUpvalue(func, "find_wagstaff")
+                                local target_mark = Upvaluehelper.GetUpvalue(func, "target_mark")
+                                local GetTool = Upvaluehelper.GetUpvalue(func, "GetTool")
+                                local Util = Upvaluehelper.GetUpvalue(func, "Util")
+                                local SLEEP_TIME = Upvaluehelper.GetUpvalue(func, "SLEEP_TIME")
+                                local Stop = Upvaluehelper.GetUpvalue(func, "Stop")
 
-                            if working_thread then return end
+                                Upvaluehelper.SetUpvalue(GetTool, ActionQueuer, "ActionQueuer")
+                                ---------------------------------
+                                if working_thread then return end
 
-                            if not ActionQueuer then MOD_util:Warning("Wagstaff Tool Giver needs ActionQueuer to work!") return end
+                                if not ActionQueuer then MOD_util:Warning("Wagstaff Tool Giver needs ActionQueuer to work!") return end
 
-                            local wagstaff = FindEntity(ThePlayer, WAGSTAFF_RANGE, find_wagstaff) -- 找瓦格斯塔夫
-                            local moonstorm_static_roamer = FindEntity(ThePlayer, WAGSTAFF_RANGE, function(inst) return inst.prefab == "moonstorm_static_roamer" end) -- 找未约束的静电
-                            local moonstorm_static_nowag = FindEntity(ThePlayer, WAGSTAFF_RANGE, function(inst) return inst.prefab == "moonstorm_static_nowag" end) -- 找约束静电
-                            if wagstaff then -- 查找瓦格斯塔夫
-                                if not wagstaff.tool_wanted and not wagstaff.AnimState:IsCurrentAnimation("build_loop") then
-                                    ActionQueuer:SendAction(BufferedAction(ThePlayer, wagstaff, ACTIONS.WALKTO, nil, wagstaff:GetPosition()))
-                                    return
-                                end
-
-                                target_mark = wagstaff:SpawnChild("reticule")
-
-                                working_thread = ThePlayer:StartThread(function()
-                                    while ThePlayer:IsValid() and wagstaff:IsValid() do
-                                        if wagstaff.tool_wanted and not wagstaff.AnimState:IsCurrentAnimation("build_loop") then
-                                            local tool = GetTool(wagstaff.tool_wanted, wagstaff)
-                                            if tool then
-                                                Util.UseItemOnScene(tool, BufferedAction(ThePlayer, wagstaff, ACTIONS.GIVE, tool))
-                                            end
-                                        end
-                                        Sleep(SLEEP_TIME)
+                                local wagstaff = FindEntity(ThePlayer, WAGSTAFF_RANGE, find_wagstaff) -- 找瓦格斯塔夫
+                                local moonstorm_static_roamer = FindEntity(ThePlayer, WAGSTAFF_RANGE, function(inst) return inst.prefab == "moonstorm_static_roamer" end) -- 找未约束的静电
+                                local moonstorm_static_nowag = FindEntity(ThePlayer, WAGSTAFF_RANGE, function(inst) return inst.prefab == "moonstorm_static_nowag" end) -- 找约束静电
+                                if wagstaff then -- 查找瓦格斯塔夫
+                                    if not wagstaff.tool_wanted and not wagstaff.AnimState:IsCurrentAnimation("build_loop") then
+                                        ActionQueuer:SendAction(BufferedAction(ThePlayer, wagstaff, ACTIONS.WALKTO, nil, wagstaff:GetPosition()))
+                                        return
                                     end
-                                    Stop()
-                                end)
-                            elseif moonstorm_static_nowag then -- 直接做约束静电任务（无瓦格斯塔夫）
-                                target_mark = moonstorm_static_nowag:SpawnChild("reticule") -- 底部生成一个标记说明模组生效
 
-                                local tools =
-                                {
-                                    "wagstaff_tool_1",
-                                    "wagstaff_tool_2",
-                                    "wagstaff_tool_3",
-                                    "wagstaff_tool_4",
-                                    "wagstaff_tool_5",
-                                }
+                                    target_mark = wagstaff:SpawnChild("reticule")
 
-                                working_thread = ThePlayer:StartThread(function()
-                                    local need_go = true -- 是否需要靠近约束静电
-                                    while ThePlayer:IsValid() and moonstorm_static_nowag:IsValid() do
-                                        if moonstorm_static_nowag.AnimState:IsCurrentAnimation("needtool_idle") then
-                                            local tool
-                                            -- 先从身上找所有可用的工具
-                                            for _,v in ipairs(tools) do
-                                                tool = Util.GetItemFromContainers(nil, v, nil, function(inst, prefab) return inst.prefab == prefab end)
+                                    working_thread = ThePlayer:StartThread(function()
+                                        while ThePlayer:IsValid() and wagstaff:IsValid() do
+                                            if wagstaff.tool_wanted and not wagstaff.AnimState:IsCurrentAnimation("build_loop") then
+                                                local tool = GetTool(wagstaff.tool_wanted, wagstaff)
                                                 if tool then
-                                                    Util.UseItemOnScene(tool, BufferedAction(ThePlayer, moonstorm_static_nowag, ACTIONS.GIVE, tool))
-                                                    break
+                                                    Util.UseItemOnScene(tool, BufferedAction(ThePlayer, wagstaff, ACTIONS.GIVE, tool))
                                                 end
                                             end
-                                            -- 身上没有再去地上找
-                                            if not tool then
+                                            Sleep(SLEEP_TIME)
+                                        end
+                                        Stop()
+                                    end)
+                                elseif moonstorm_static_nowag then -- 直接做约束静电任务（无瓦格斯塔夫）
+                                    target_mark = moonstorm_static_nowag:SpawnChild("reticule") -- 底部生成一个标记说明模组生效
+
+                                    local tools =
+                                    {
+                                        "wagstaff_tool_1",
+                                        "wagstaff_tool_2",
+                                        "wagstaff_tool_3",
+                                        "wagstaff_tool_4",
+                                        "wagstaff_tool_5",
+                                    }
+
+                                    working_thread = ThePlayer:StartThread(function()
+                                        local need_go = true -- 是否需要靠近约束静电
+                                        while ThePlayer:IsValid() and moonstorm_static_nowag:IsValid() do
+                                            if moonstorm_static_nowag.AnimState:IsCurrentAnimation("needtool_idle") then
+                                                local tool
+                                                -- 先从身上找所有可用的工具
                                                 for _,v in ipairs(tools) do
-                                                    tool = GetTool(v, moonstorm_static_nowag)
+                                                    tool = Util.GetItemFromContainers(nil, v, nil, function(inst, prefab) return inst.prefab == prefab end)
                                                     if tool then
                                                         Util.UseItemOnScene(tool, BufferedAction(ThePlayer, moonstorm_static_nowag, ACTIONS.GIVE, tool))
                                                         break
                                                     end
                                                 end
-                                            end
-                                        else -- 约束静电不需要材料时，收集地面物品
-                                            -- 有工具捡工具，没工具贴近约束静电
-                                            local target
-                                            for _,v in ipairs(tools) do
-                                                target = FindEntity(moonstorm_static_nowag, 10, function(inst) return inst.prefab == v end, nil, {"INLIMBO"})
-                                                if target then -- 搜索到地面的目标，开始拾取
-                                                    ActionQueuer:SendActionAndWait(BufferedAction(ThePlayer, target, ACTIONS.PICKUP), false, target)
-                                                    need_go = true
-                                                    break
+                                                -- 身上没有再去地上找
+                                                if not tool then
+                                                    for _,v in ipairs(tools) do
+                                                        tool = GetTool(v, moonstorm_static_nowag)
+                                                        if tool then
+                                                            Util.UseItemOnScene(tool, BufferedAction(ThePlayer, moonstorm_static_nowag, ACTIONS.GIVE, tool))
+                                                            break
+                                                        end
+                                                    end
+                                                end
+                                            else -- 约束静电不需要材料时，收集地面物品
+                                                -- 有工具捡工具，没工具贴近约束静电
+                                                local target
+                                                for _,v in ipairs(tools) do
+                                                    target = FindEntity(moonstorm_static_nowag, 10, function(inst) return inst.prefab == v end, nil, {"INLIMBO"})
+                                                    if target then -- 搜索到地面的目标，开始拾取
+                                                        ActionQueuer:SendActionAndWait(BufferedAction(ThePlayer, target, ACTIONS.PICKUP), false, target)
+                                                        need_go = true
+                                                        break
+                                                    end
+                                                end
+                                                if not target and need_go then
+                                                    need_go = false
+                                                    ActionQueuer:SendAction(BufferedAction(ThePlayer, moonstorm_static_nowag, ACTIONS.WALKTO, nil, moonstorm_static_nowag:GetPosition()))
                                                 end
                                             end
-                                            if not target and need_go then
-                                                need_go = false
-                                                ActionQueuer:SendAction(BufferedAction(ThePlayer, moonstorm_static_nowag, ACTIONS.WALKTO, nil, moonstorm_static_nowag:GetPosition()))
-                                            end
+                                            Sleep(SLEEP_TIME)
                                         end
-                                        Sleep(SLEEP_TIME)
-                                    end
-                                    Stop()
-                                end)
-                            elseif moonstorm_static_roamer then -- 跟随/捕获未约束的静电
-                                target_mark = moonstorm_static_roamer:SpawnChild("reticule")
-                                working_thread = ThePlayer:StartThread(function()
-                                    while ThePlayer:IsValid() and moonstorm_static_roamer:IsValid() do
-                                        local tool = GetTool("moonstorm_static_catcher", moonstorm_static_roamer) -- 获取物品栏是否有静电约束仪
-                                        local HandsEquip = GetHandsEquip() -- 获取手上装备的物品
-                                        if tool and (HandsEquip and HandsEquip.prefab ~= "moonstorm_static_catcher") then
-                                            -- 距离较远则可以穿戴加速物品(不根据黑化排队论模组设置决定，不然代码太多了)
-                                            local speeditem = ActionQueuer:HasAddSpeedEquipment()
-                                            if speeditem and math.sqrt(distsq(moonstorm_static_roamer:GetPosition(), ThePlayer:GetPosition())) > math.max((moonstorm_static_roamer:GetPhysicsRadius(0) or 0.5) + 2, 5) then
-                                                ActionQueuer:EquipItem(speeditem) -- 装备加速道具
-                                                -- 跟随未约束的静电
-                                                ActionQueuer:SendAction(BufferedAction(ThePlayer, moonstorm_static_roamer, ACTIONS.WALKTO, nil, moonstorm_static_roamer:GetPosition()))
-                                            else
-                                                ActionQueuer:EquipItem(tool) -- 在静电附近，装备静电约束仪
-                                            end
-                                        else
-                                            if HandsEquip and HandsEquip.prefab == "moonstorm_static_catcher" then -- 如果手上装备了静电约束仪，直接抓捕静电
-                                                SendRPCToServer(RPC.LeftClick, ACTIONS.DIVEGRAB.code, moonstorm_static_roamer:GetPosition().x,
-                                                    moonstorm_static_roamer:GetPosition().z,
-                                                    moonstorm_static_roamer, nil, nil, ACTIONS.DIVEGRAB.canforce, ACTIONS.DIVEGRAB.mod_name)
-                                            else
+                                        Stop()
+                                    end)
+                                elseif moonstorm_static_roamer then -- 跟随/捕获未约束的静电
+                                    target_mark = moonstorm_static_roamer:SpawnChild("reticule")
+                                    working_thread = ThePlayer:StartThread(function()
+                                        while ThePlayer:IsValid() and moonstorm_static_roamer:IsValid() do
+                                            local tool = GetTool("moonstorm_static_catcher", moonstorm_static_roamer) -- 获取物品栏是否有静电约束仪
+                                            local HandsEquip = GetHandsEquip() -- 获取手上装备的物品
+                                            if tool and (HandsEquip and HandsEquip.prefab ~= "moonstorm_static_catcher") then
+                                                -- 距离较远则可以穿戴加速物品(不根据黑化排队论模组设置决定，不然代码太多了)
                                                 local speeditem = ActionQueuer:HasAddSpeedEquipment()
-                                                ActionQueuer:EquipItem(speeditem) -- 装备加速道具
-                                                ActionQueuer:SendAction(BufferedAction(ThePlayer, moonstorm_static_roamer, ACTIONS.WALKTO, nil, moonstorm_static_roamer:GetPosition())) -- 跟随未约束的静电
+                                                if speeditem and math.sqrt(distsq(moonstorm_static_roamer:GetPosition(), ThePlayer:GetPosition())) > math.max((moonstorm_static_roamer:GetPhysicsRadius(0) or 0.5) + 2, 5) then
+                                                    ActionQueuer:EquipItem(speeditem) -- 装备加速道具
+                                                    -- 跟随未约束的静电
+                                                    ActionQueuer:SendAction(BufferedAction(ThePlayer, moonstorm_static_roamer, ACTIONS.WALKTO, nil, moonstorm_static_roamer:GetPosition()))
+                                                else
+                                                    ActionQueuer:EquipItem(tool) -- 在静电附近，装备静电约束仪
+                                                end
+                                            else
+                                                if HandsEquip and HandsEquip.prefab == "moonstorm_static_catcher" then -- 如果手上装备了静电约束仪，直接抓捕静电
+                                                    SendRPCToServer(RPC.LeftClick, ACTIONS.DIVEGRAB.code, moonstorm_static_roamer:GetPosition().x,
+                                                        moonstorm_static_roamer:GetPosition().z,
+                                                        moonstorm_static_roamer, nil, nil, ACTIONS.DIVEGRAB.canforce, ACTIONS.DIVEGRAB.mod_name)
+                                                else
+                                                    local speeditem = ActionQueuer:HasAddSpeedEquipment()
+                                                    ActionQueuer:EquipItem(speeditem) -- 装备加速道具
+                                                    ActionQueuer:SendAction(BufferedAction(ThePlayer, moonstorm_static_roamer, ACTIONS.WALKTO, nil, moonstorm_static_roamer:GetPosition())) -- 跟随未约束的静电
+                                                end
                                             end
+                                            Sleep(SLEEP_TIME)
                                         end
-                                        Sleep(SLEEP_TIME)
-                                    end
-                                    Stop()
-                                end)
+                                        Stop()
+                                    end)
+                                end
+
+                                Upvaluehelper.SetUpvalue(func, target_mark, "target_mark")
+                                Upvaluehelper.SetUpvalue(func, working_thread, "working_thread")
                             end
 
-                            Upvaluehelper.SetUpvalue(func, target_mark, "target_mark")
-                            Upvaluehelper.SetUpvalue(func, working_thread, "working_thread")
+                            Upvaluehelper.SetUpvalue(k.fn, new_func, "func")
                         end
-
-                        Upvaluehelper.SetUpvalue(k.fn, new_func, "func")
                     end
                 end
             end
