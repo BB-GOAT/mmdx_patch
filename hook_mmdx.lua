@@ -243,6 +243,7 @@ AddComponentPostInit("playercontroller", function(self, inst)
         local env = ModManager:GetMod("workshop-3136701076").env
         local INV_util = env.INV_util
         local POS_util = env.POS_util
+        local ENT_util = env.ENT_util
         local MOD_util = env.MOD_util
         local dont_controller_prefab = {
             ["luckysimulator"] = true -- 欧皇模拟器：老虎机
@@ -266,6 +267,34 @@ AddComponentPostInit("playercontroller", function(self, inst)
 
         local allowed_actions = Upvaluehelper.GetUpvalue(ActionQueuer.GetAction, "allowed_actions")
         if allowed_actions then
+            -- 解决砍巨石枝时卡顿的问题
+            local chop_rock_tree_flag = false
+            allowed_actions["CHOP"].rpc = function(act)
+                local target = act.target
+                if target and target:HasTag("rock_tree") then
+                    local anim = ENT_util:GetAnimation(target)
+                    if anim and (anim:find('fall_pre') or anim:find("fall_miss") or anim:find("fall_bounce")) then
+                        if not chop_rock_tree_flag then
+                            local pos = POS_util:CalculateAimPos(ThePlayer, target, 0,
+                                (target:HasTag("tree_rock1") and -3 or -4) - 0.5)
+                            local speeditem = ActionQueuer:HasAddSpeedEquipment()
+                            ActionQueuer:EquipItem(speeditem)
+                            ActionQueuer.waiting_for_break = 1
+                            POS_util:GoToPoint(pos.x, pos.z)
+                            chop_rock_tree_flag = true
+                        end
+                    else
+                        chop_rock_tree_flag = false
+                        SendRPCToServer(RPC.LeftClick, ACTIONS.CHOP.code, act.target:GetPosition().x,
+                            act.target:GetPosition().z,
+                            act.target)
+                    end
+                else
+                    SendRPCToServer(RPC.LeftClick, ACTIONS.CHOP.code, act.target:GetPosition().x, act.target:GetPosition().z,
+                        act.target)
+                end
+            end
+
             -- 修改关于晾肉架的操作
             allowed_actions['STORE'].rpc = function(act)
                 -- 晾肉架批量塞入优化
@@ -277,12 +306,6 @@ AddComponentPostInit("playercontroller", function(self, inst)
 
                     local container = act.target.replica and act.target.replica.container
                     if container and container:IsOpenedBy(ThePlayer) then
-                        -- 从物品栏塞入
-                        for k, v in pairs(ThePlayer.replica.inventory:GetItems() or {}) do
-                            if v.prefab == act.item.prefab then
-                                SendRPCToServer(RPC.MoveInvItemFromAllOfSlot, k, act.target)
-                            end
-                        end
 
                         -- 从背包塞入
                         for con in pairs(ThePlayer.replica.inventory:GetOpenContainers() or {}) do
@@ -292,6 +315,13 @@ AddComponentPostInit("playercontroller", function(self, inst)
                                         SendRPCToServer(RPC.MoveItemFromAllOfSlot, k, con, act.target)
                                     end
                                 end
+                            end
+                        end
+
+                        -- 从物品栏塞入
+                        for k, v in pairs(ThePlayer.replica.inventory:GetItems() or {}) do
+                            if v.prefab == act.item.prefab then
+                                SendRPCToServer(RPC.MoveInvItemFromAllOfSlot, k, act.target)
                             end
                         end
                     end
