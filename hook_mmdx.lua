@@ -22,7 +22,7 @@ AddGamePostInit(function()
     ---------------------------------------------------------------------------------------------------------------------------------------------------------
 
     -- 检测是否开启其它高亮显示相同物品模组
-    local enabled_other_highlight_mod = _G.KnownModIndex:IsModEnabledAny("workshop-2189004162")
+    local enabled_other_highlight_mod = KnownModIndex:IsModEnabledAny("workshop-2189004162")
                                         or MOD_RPC.ShowMeSHint
                                         or MOD_RPC.FINDER_REDUX
 
@@ -187,6 +187,8 @@ AddGamePostInit(function()
     end
 end)
 
+---------------------------------------------------------------------------------------------------------------------------------------------------------
+
 -- 修改“点击切装备”模组，按住Ctrl、Alt时禁用其功能，对准部分物品时也禁用其功能
 AddGamePostInit(function()
     local env = ModManager:GetMod("workshop-3135978089") and ModManager:GetMod("workshop-3135978089").env
@@ -232,6 +234,8 @@ end)
 --         end)
 --     end)
 -- end
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------
 
 -- 修改“黑化排队论”模组
 AddComponentPostInit("playercontroller", function(self, inst)
@@ -369,3 +373,63 @@ AddComponentPostInit("playercontroller", function(self, inst)
         end
     end)
 end)
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------
+
+-- 修改buff计时器模组
+if KnownModIndex:IsModEnabledAny("workshop-3217951008") then
+    local Bufftimer = Upvaluehelper.GetUpvalue(_G.MigrateToServer, "Bufftimer")
+    if Bufftimer then
+        local ls = Bufftimer.prefablist
+        ls.winter_food7 = { duration = 15, name = "升温" } -- 苹果酒
+        ls.winter_food8 = { duration = 15, name = "升温" } -- 热可可
+        ls.figkabab = { duration = 15, name = "升温" } -- 无花果烤串
+        ls.frognewton = { duration = 15, name = "升温" } -- 无花果蛙腿三明治
+        ls.turkeydinner = { duration = 10, name = "升温" } -- 火鸡正餐
+        ls.dragonpie = { duration = 10, name = "升温" } -- 火龙果派
+        ls.bunnystew = { duration = 5, name = "升温" } -- 炖兔子
+        ls.pepperpopper = { duration = 15, name = "升温" } -- 爆炒填馅辣椒
+        ls.kabobs = { duration = 15, name = "升温" } -- 肉串
+        ls.sweettea = { duration = 5, name = "升温" } -- 舒缓茶
+        ls.honeyham = { duration = 10, name = "升温" } -- 蜜汁火腿
+        ls.hotchili = { duration = 15, name = "升温" } -- 辣椒炖肉
+        -- ls.dragonchilisalad = { duration = 300, name = "升温" } -- 辣龙椒沙拉
+        ls.stuffedeggplant = { duration = 5, name = "升温" } -- 酿茄子
+
+        ls.winter_food9 = { duration = 15, name = "降温" } -- 美味的蛋酒
+        ls.ice = { duration = 7.5, name = "降温" } -- 冰
+        ls.icecream = { duration = 15, name = "降温" } -- 冰淇淋
+        ls.frozenbananadaiquiri = { duration = 15, name = "降温" } -- 冰香蕉冻唇蜜
+        -- [[多肉茶]]
+        ls.fruitmedley = { duration = 5, name = "降温" } -- 水果圣代
+        ls.carnivalfood_corntea = { duration = 15, name = "降温" } -- 玉米泥
+        -- ls.gazpacho = { duration = 300, name = '降温' } -- 芦笋冷汤
+        ls.watermelon = { duration = 5, name = "降温" } -- 西瓜
+        ls.watermelonicle = { duration = 10, name = "降温" } -- 西瓜冰棍
+        ls.ceviche = { duration = 10, name = "降温" } -- 酸橘汁腌鱼
+        ls.bananapop = { duration = 10, name = "降温" } -- 香蕉冻
+
+        ls.hermitcrabtea_petals = { duration = 45, name = "花瓣茶" }
+        ls.hermitcrabtea_petals_evil = { duration = 60, name = "深色花瓣茶" }
+        ls.hermitcrabtea_foliage = { duration = 180, name = "蕨叶茶" }
+        ls.hermitcrabtea_succulent_picked = { duration = 120, name = "降温" } -- 多肉茶
+        ls.hermitcrabtea_firenettles = { duration = 120, name = "火荨麻茶" }
+        ls.hermitcrabtea_tillweed = { duration = 15, name = "犁地草茶" }
+        ls.hermitcrabtea_moon_tree_blossom = { duration = 180, name = "月树花茶" }
+        ls.hermitcrabtea_forgetmelots = { duration = 45, name = "必忘我茶" }
+
+        if TUNING.FOOD_SPEED_LONG then
+            ls.coffee = { duration = TUNING.FOOD_SPEED_LONG, name = "咖啡加速" } -- 咖啡
+            ls.tiroemisu = { duration = TUNING.FOOD_SPEED_LONG/1.2, name = "咖啡加速" } -- 提卵米苏
+        end
+        if TUNING.FOOD_SPEED_AVERAGE then
+            ls.coffeebeans_cooked = { duration = TUNING.FOOD_SPEED_AVERAGE, name = "咖啡加速" } -- 烤咖啡豆
+        end
+
+        ls.cutnettle = { duration = 200, name = "免疫花粉症" } -- 荨麻
+        ls.nettlelosange = { duration = 720, name = "免疫花粉症" } -- 荨麻卷
+        ls.meated_nettle = { duration = 600, name = "免疫花粉症" } -- 肉夹荨麻
+        ls.teatree_nut = { duration = 60, name = "免疫花粉症" } -- 茶籽
+        ls.teatree_nut_cooked = { duration = 120, name = "免疫花粉症" } -- 熟茶籽
+    end
+end

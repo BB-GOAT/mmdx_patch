@@ -3,6 +3,7 @@ GLOBAL.setmetatable(env, {
         return GLOBAL.rawget(GLOBAL, k)
     end
 })
+_G = GLOBAL
 
 -- local function Import(modulename)
 -- 	local f = GLOBAL.kleiloadlua(modulename)
