@@ -42,6 +42,13 @@ AddComponentPostInit("playercontroller", function(self, inst)
                                 local wagstaff = FindEntity(ThePlayer, WAGSTAFF_RANGE, find_wagstaff) -- 找瓦格斯塔夫
                                 local moonstorm_static_roamer = FindEntity(ThePlayer, WAGSTAFF_RANGE, function(inst) return inst.prefab == "moonstorm_static_roamer" end) -- 找未约束的静电
                                 local moonstorm_static_nowag = FindEntity(ThePlayer, WAGSTAFF_RANGE, function(inst) return inst.prefab == "moonstorm_static_nowag" end) -- 找约束静电
+
+                                -- 如果身上有加速道具，装备加速道具
+                                local speeditem = ActionQueuer:HasAddSpeedEquipment()
+                                if speeditem then
+                                    ActionQueuer:EquipItem(speeditem)
+                                end
+
                                 if wagstaff then -- 查找瓦格斯塔夫
                                     if not wagstaff.tool_wanted and not wagstaff.AnimState:IsCurrentAnimation("build_loop") then
                                         ActionQueuer:SendAction(BufferedAction(ThePlayer, wagstaff, ACTIONS.WALKTO, nil, wagstaff:GetPosition()))
@@ -140,7 +147,9 @@ AddComponentPostInit("playercontroller", function(self, inst)
                                                         moonstorm_static_roamer, nil, nil, ACTIONS.DIVEGRAB.canforce, ACTIONS.DIVEGRAB.mod_name)
                                                 else
                                                     local speeditem = ActionQueuer:HasAddSpeedEquipment()
-                                                    ActionQueuer:EquipItem(speeditem) -- 装备加速道具
+                                                    if speeditem then
+                                                        ActionQueuer:EquipItem(speeditem) -- 装备加速道具
+                                                    end
                                                     ActionQueuer:SendAction(BufferedAction(ThePlayer, moonstorm_static_roamer, ACTIONS.WALKTO, nil, moonstorm_static_roamer:GetPosition())) -- 跟随未约束的静电
                                                 end
                                             end

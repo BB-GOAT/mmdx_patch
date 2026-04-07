@@ -299,7 +299,7 @@ AddComponentPostInit("playercontroller", function(self, inst)
             allowed_actions['STORE'].rpc = function(act)
                 -- 晾肉架批量塞入优化
                 if act.target and act.target.prefab and allowed_actions.RUMMAGE.meatrack_list[act.target.prefab] then
-                    -- 一开始时使用STORE驱动走路（唯一能让玩家走过去的RPC）
+                    -- 一开始时使用STORE驱动走路
                     if act.time == 0 then
                         act.self:SendControllerRPCSafely(ACTIONS.STORE.code, act.item, act.target)
                     end
@@ -343,9 +343,10 @@ AddComponentPostInit("playercontroller", function(self, inst)
                 end,
             }
             allowed_actions['STORE'].addtimefn = function(act)
-                return act.target and act.target.replica and act.target.replica.container and
-                    -- 想要晒肉时直接addtime，确保SendControllerRPCSafely只运行一次
-                    (allowed_actions.RUMMAGE.meatrack_list[act.target.prefab] or act.target.replica.container:IsOpenedBy(act.self.inst))
+                return
+                    act.target and
+                    (allowed_actions.RUMMAGE.meatrack_list[act.target.prefab] or -- 想要晒肉时直接addtime，确保SendControllerRPCSafely只运行一次
+                    act.target.replica and act.target.replica.container and act.target.replica.container:IsOpenedBy(act.self.inst))
             end
 
             allowed_actions['RUMMAGE'].reselectfn = function(act)
@@ -364,6 +365,7 @@ AddComponentPostInit("playercontroller", function(self, inst)
                     end)
                 end
             end
+            allowed_actions['RUMMAGE'].sleeptime = KnownModIndex:IsModEnabledAny("workshop-2158549297") and 0.2 -- 兼容【古川笠的快速采集】模组
         end
     end)
 end)
