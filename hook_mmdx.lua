@@ -6,7 +6,7 @@ AddGamePostInit(function()
 
     local Memory = Upvaluehelper.GetUpvalue(_G.GetContainer_mmdxdata, "Memory")
     local bancontainers = Upvaluehelper.GetUpvalue(Memory.GetContainer_mmdxdata, "bancontainers")
-    if not Memory then MOD_util:Warning("记忆力模组的Memory获取失败") return end
+    if not Memory then MOD_util:Warning("获取 记忆力 模组的 Memory 失败") return end
 
     --------------------------------------------------- 更新禁止记录信息的容器 ---------------------------------------------------
 
@@ -199,7 +199,7 @@ AddGamePostInit(function()
     if not fn then return end
 
     local selectwork = Upvaluehelper.GetUpvalue(fn, "selectwork")
-    if not selectwork then return end
+    if not selectwork then MOD_util:Warning("获取 点击切装备 模组的 selectwork 失败") return end
 
     local black_prefab = {
         ["treasurechest"] = true, -- 箱子
@@ -242,7 +242,7 @@ AddComponentPostInit("playercontroller", function(self, inst)
     if inst ~= ThePlayer then return end
     ThePlayer:DoTaskInTime(0, function()
         local ActionQueuer = Upvaluehelper.FindUpvalue(self.OnControl, "ActionQueuer", "/mods/workshop%-3136701076/modmain.lua") -- 尝试获取黑化排队论的ActionQueuer
-        if not ActionQueuer then return end
+        if not ActionQueuer then MOD_util:Warning("获取 黑化排队论 模组的 ActionQueuer 失败") return end
 
         local env = ModManager:GetMod("workshop-3136701076").env
         local INV_util = env.INV_util
@@ -353,6 +353,21 @@ AddComponentPostInit("playercontroller", function(self, inst)
                     act.target.replica and act.target.replica.container and act.target.replica.container:IsOpenedBy(act.self.inst))
             end
 
+            -- 兼容【古川笠的快速采集】模组，使用flag标记阻止重复开启容器
+            if KnownModIndex:IsModEnabledAny("workshop-2158549297") then
+                local flag
+                local old_RUMMAGE_rpc = allowed_actions['RUMMAGE'].rpc
+                allowed_actions['RUMMAGE'].rpc = function(act)
+                    if flag then
+                        flag = false
+                        return old_RUMMAGE_rpc(act)
+                    end
+                end
+                allowed_actions['RUMMAGE'].act_pre_fn = function(act, self)
+                    flag = true
+                end
+            end
+
             allowed_actions['RUMMAGE'].reselectfn = function(act)
                 if act.target and act.target.prefab and allowed_actions.RUMMAGE.meatrack_list[act.target.prefab] then
                     local num = act.target.replica.container and act.target.replica.container:GetNumSlots() or 3
@@ -369,7 +384,6 @@ AddComponentPostInit("playercontroller", function(self, inst)
                     end)
                 end
             end
-            allowed_actions['RUMMAGE'].sleeptime = KnownModIndex:IsModEnabledAny("workshop-2158549297") and 0.2 -- 兼容【古川笠的快速采集】模组
         end
     end)
 end)
@@ -379,57 +393,95 @@ end)
 -- 修改buff计时器模组
 if KnownModIndex:IsModEnabledAny("workshop-3217951008") then
     local Bufftimer = Upvaluehelper.GetUpvalue(_G.MigrateToServer, "Bufftimer")
-    if Bufftimer then
-        local ls = Bufftimer.prefablist
-        ls.winter_food7 = { duration = 15, name = "升温" } -- 苹果酒
-        ls.winter_food8 = { duration = 15, name = "升温" } -- 热可可
-        ls.figkabab = { duration = 15, name = "升温" } -- 无花果烤串
-        ls.frognewton = { duration = 15, name = "升温" } -- 无花果蛙腿三明治
-        ls.turkeydinner = { duration = 10, name = "升温" } -- 火鸡正餐
-        ls.dragonpie = { duration = 10, name = "升温" } -- 火龙果派
-        ls.bunnystew = { duration = 5, name = "升温" } -- 炖兔子
-        ls.pepperpopper = { duration = 15, name = "升温" } -- 爆炒填馅辣椒
-        ls.kabobs = { duration = 15, name = "升温" } -- 肉串
-        ls.sweettea = { duration = 5, name = "升温" } -- 舒缓茶
-        ls.honeyham = { duration = 10, name = "升温" } -- 蜜汁火腿
-        ls.hotchili = { duration = 15, name = "升温" } -- 辣椒炖肉
-        -- ls.dragonchilisalad = { duration = 300, name = "升温" } -- 辣龙椒沙拉
-        ls.stuffedeggplant = { duration = 5, name = "升温" } -- 酿茄子
+    if not Bufftimer then MOD_util:Warning("获取 buff计时器 模组的 Bufftimer 失败") return end
+    local ls = Bufftimer.prefablist
+    ls.winter_food7 = { duration = 15, name = "升温" } -- 苹果酒
+    ls.winter_food8 = { duration = 15, name = "升温" } -- 热可可
+    ls.figkabab = { duration = 15, name = "升温" } -- 无花果烤串
+    ls.frognewton = { duration = 15, name = "升温" } -- 无花果蛙腿三明治
+    ls.turkeydinner = { duration = 10, name = "升温" } -- 火鸡正餐
+    ls.dragonpie = { duration = 10, name = "升温" } -- 火龙果派
+    ls.bunnystew = { duration = 5, name = "升温" } -- 炖兔子
+    ls.pepperpopper = { duration = 15, name = "升温" } -- 爆炒填馅辣椒
+    ls.kabobs = { duration = 15, name = "升温" } -- 肉串
+    ls.sweettea = { duration = 5, name = "升温" } -- 舒缓茶
+    ls.honeyham = { duration = 10, name = "升温" } -- 蜜汁火腿
+    ls.hotchili = { duration = 15, name = "升温" } -- 辣椒炖肉
+    -- ls.dragonchilisalad = { duration = 300, name = "升温" } -- 辣龙椒沙拉
+    ls.stuffedeggplant = { duration = 5, name = "升温" } -- 酿茄子
 
-        ls.winter_food9 = { duration = 15, name = "降温" } -- 美味的蛋酒
-        ls.ice = { duration = 7.5, name = "降温" } -- 冰
-        ls.icecream = { duration = 15, name = "降温" } -- 冰淇淋
-        ls.frozenbananadaiquiri = { duration = 15, name = "降温" } -- 冰香蕉冻唇蜜
-        -- [[多肉茶]]
-        ls.fruitmedley = { duration = 5, name = "降温" } -- 水果圣代
-        ls.carnivalfood_corntea = { duration = 15, name = "降温" } -- 玉米泥
-        -- ls.gazpacho = { duration = 300, name = '降温' } -- 芦笋冷汤
-        ls.watermelon = { duration = 5, name = "降温" } -- 西瓜
-        ls.watermelonicle = { duration = 10, name = "降温" } -- 西瓜冰棍
-        ls.ceviche = { duration = 10, name = "降温" } -- 酸橘汁腌鱼
-        ls.bananapop = { duration = 10, name = "降温" } -- 香蕉冻
+    ls.winter_food9 = { duration = 15, name = "降温" } -- 美味的蛋酒
+    ls.ice = { duration = 7.5, name = "降温" } -- 冰
+    ls.icecream = { duration = 15, name = "降温" } -- 冰淇淋
+    ls.frozenbananadaiquiri = { duration = 15, name = "降温" } -- 冰香蕉冻唇蜜
+    -- [[多肉茶]]
+    ls.fruitmedley = { duration = 5, name = "降温" } -- 水果圣代
+    ls.carnivalfood_corntea = { duration = 15, name = "降温" } -- 玉米泥
+    -- ls.gazpacho = { duration = 300, name = '降温' } -- 芦笋冷汤
+    ls.watermelon = { duration = 5, name = "降温" } -- 西瓜
+    ls.watermelonicle = { duration = 10, name = "降温" } -- 西瓜冰棍
+    ls.ceviche = { duration = 10, name = "降温" } -- 酸橘汁腌鱼
+    ls.bananapop = { duration = 10, name = "降温" } -- 香蕉冻
 
-        ls.hermitcrabtea_petals = { duration = 45, name = "花瓣茶" }
-        ls.hermitcrabtea_petals_evil = { duration = 60, name = "深色花瓣茶" }
-        ls.hermitcrabtea_foliage = { duration = 180, name = "蕨叶茶" }
-        ls.hermitcrabtea_succulent_picked = { duration = 120, name = "降温" } -- 多肉茶
-        ls.hermitcrabtea_firenettles = { duration = 120, name = "火荨麻茶" }
-        ls.hermitcrabtea_tillweed = { duration = 15, name = "犁地草茶" }
-        ls.hermitcrabtea_moon_tree_blossom = { duration = 180, name = "月树花茶" }
-        ls.hermitcrabtea_forgetmelots = { duration = 45, name = "必忘我茶" }
+    ls.hermitcrabtea_petals = { duration = 45, name = "花瓣茶" }
+    ls.hermitcrabtea_petals_evil = { duration = 60, name = "深色花瓣茶" }
+    ls.hermitcrabtea_foliage = { duration = 180, name = "蕨叶茶" }
+    ls.hermitcrabtea_succulent_picked = { duration = 120, name = "降温" } -- 多肉茶
+    ls.hermitcrabtea_firenettles = { duration = 120, name = "火荨麻茶" }
+    ls.hermitcrabtea_tillweed = { duration = 15, name = "犁地草茶" }
+    ls.hermitcrabtea_moon_tree_blossom = { duration = 180, name = "月树花茶" }
+    ls.hermitcrabtea_forgetmelots = { duration = 45, name = "必忘我茶" }
 
-        if TUNING.FOOD_SPEED_LONG then
-            ls.coffee = { duration = TUNING.FOOD_SPEED_LONG, name = "咖啡加速" } -- 咖啡
-            ls.tiroemisu = { duration = TUNING.FOOD_SPEED_LONG/1.2, name = "咖啡加速" } -- 提卵米苏
+    if TUNING.FOOD_SPEED_LONG then
+        ls.coffee = { duration = TUNING.FOOD_SPEED_LONG, name = "咖啡加速" } -- 咖啡
+        ls.tiroemisu = { duration = TUNING.FOOD_SPEED_LONG/1.2, name = "咖啡加速" } -- 提卵米苏
+    end
+    if TUNING.FOOD_SPEED_AVERAGE then
+        ls.coffeebeans_cooked = { duration = TUNING.FOOD_SPEED_AVERAGE, name = "咖啡加速" } -- 烤咖啡豆
+    end
+
+    ls.cutnettle = { duration = 200, name = "免疫花粉症" } -- 荨麻
+    ls.nettlelosange = { duration = 720, name = "免疫花粉症" } -- 荨麻卷
+    ls.meated_nettle = { duration = 600, name = "免疫花粉症" } -- 肉夹荨麻
+    ls.teatree_nut = { duration = 60, name = "免疫花粉症" } -- 茶籽
+    ls.teatree_nut_cooked = { duration = 120, name = "免疫花粉症" } -- 熟茶籽
+
+end
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------
+
+-- 修改show me血条模组
+if KnownModIndex:IsModEnabledAny("workshop-3620271154") then
+    local showme_health = Upvaluehelper.Getmoddata("workshop-3620271154", "GamePostInit", nil, "showme_health")
+    if not showme_health then MOD_util:Warning("获取Show Me血条模组的 showme_health 失败") return end
+
+    -- 解决鼠标指着的物品不显示信息的问题
+    local showme_health_DDOS_server = showme_health.DDOS_server
+    function showme_health:DDOS_server()
+        if showme_health.close then return end
+        if not ThePlayer then return end
+
+        -- 检查鼠标下是否指着物品
+        local target = _G.TheInput:GetHUDEntityUnderMouse()
+        if target ~= nil then
+            local function par(w)
+                return w.parent and (w.parent.item or par(w.parent)) or nil
+            end
+            target = target.widget ~= nil and par(target.widget)
+        else
+            target = _G.TheInput:GetWorldEntityUnderMouse()
         end
-        if TUNING.FOOD_SPEED_AVERAGE then
-            ls.coffeebeans_cooked = { duration = TUNING.FOOD_SPEED_AVERAGE, name = "咖啡加速" } -- 烤咖啡豆
+        if type(target) ~= "table" or not target.GUID then
+            target = nil
+        end
+        if target ~= nil then
+            local time = target._last_ddos_time
+            if not time or (GetTime() - time > 1) then -- 鼠标指的物品超过1秒未更新则立刻更新
+                target._last_ddos_time = GetTime()
+                return
+            end
         end
 
-        ls.cutnettle = { duration = 200, name = "免疫花粉症" } -- 荨麻
-        ls.nettlelosange = { duration = 720, name = "免疫花粉症" } -- 荨麻卷
-        ls.meated_nettle = { duration = 600, name = "免疫花粉症" } -- 肉夹荨麻
-        ls.teatree_nut = { duration = 60, name = "免疫花粉症" } -- 茶籽
-        ls.teatree_nut_cooked = { duration = 120, name = "免疫花粉症" } -- 熟茶籽
+        return showme_health_DDOS_server(self)
     end
 end
