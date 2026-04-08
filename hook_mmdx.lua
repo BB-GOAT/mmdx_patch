@@ -489,3 +489,24 @@ if KnownModIndex:IsModEnabledAny("workshop-3620271154") then
         MOD_util:Warning("获取Show Me血条模组的 showme_health 失败")
     end
 end
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------
+
+-- 修改防止卡键模组（你怎么只防LCTRL、LALT、LSHIFT，不知道其它模组判断用的是CTRL、ALT、SHIFT吗）
+if KnownModIndex:IsModEnabledAny("workshop-3127527186") then
+    local status = Upvaluehelper.FindUpvalue(GLOBAL.TheInput.IsKeyDown, "status", "workshop%-3127527186")
+    if status then
+        status[KEY_ALT] = function()
+            return TheInput:IsControlPressed(CONTROL_FORCE_INSPECT) or TheInput:IsKeyDown(KEY_RALT)
+        end
+        status[KEY_CTRL] = function()
+            return TheInput:IsControlPressed(CONTROL_FORCE_STACK) or TheInput:IsKeyDown(KEY_RCTRL)
+        end
+        status[KEY_SHIFT] = function()
+            return TheInput:IsControlPressed(CONTROL_FORCE_TRADE) or TheInput:IsKeyDown(KEY_RSHIFT)
+        end
+        -- 至于RCTRL、RALT、RSHIFT，我也无能为力
+    else
+        MOD_util:Warning("获取 防止卡键 模组的 status 失败")
+    end
+end
