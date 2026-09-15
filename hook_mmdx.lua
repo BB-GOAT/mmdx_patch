@@ -5,12 +5,13 @@ local modconfig = {
 }
 
 -- 记忆力模组修改
+-- TODO：兼容高亮显示右键查找物品
 AddGamePostInit(function()
     if not rawget(_G, "GetContainer_mmdxdata") then return end
 
     local Memory = _G.MMDX_MEMORY
     if not Memory then MOD_util:Warning("获取 记忆力 模组的 Memory 失败") return end
-    local bancontainers = Upvaluehelper.GetUpvalue(Memory.GetContainer_mmdxdata, "bancontainers")
+    local bancontainers = Upvaluehelper.GetUpvalue(Memory.GetContainerDataKey, "bancontainers")
 
     --------------------------------------------------- 更新禁止记录信息的容器 ---------------------------------------------------
 
@@ -39,63 +40,30 @@ AddGamePostInit(function()
 
     --------------------------------------------------- 删除模组快捷键，后面换成我的版本 ---------------------------------------------------
 
-    local event = TheInput.onkeyup.events[KEY_R] -- R键开关命名功能
-    for k in pairs(event) do
-        local data = debug.getinfo(k.fn, "S")
-        if string.match(data.source, "mods/workshop%-3144028272/modmain.lua") then
-            Upvaluehelper.SetUpvalue(k.fn, true, "open") -- 启用命名功能
-            k.processor:RemoveHandler(k) -- 删除R键开关命名功能
-        end
-    end
-
-    -- 将Alt+左键命名物品功能 改为 Ctrl+Alt+左键 才能命名
     local mouse_events = TheInput.onmousebutton.events["onmousebutton"] -- 获取所有鼠标事件
-    local funct -- 原按下快捷键执行的函数
     for k in pairs(mouse_events) do
         local data = debug.getinfo(k.fn, "S")
         if string.match(data.source, "mods/workshop%-3144028272/modmain.lua") then
-            local _funct = Upvaluehelper.GetUpvalue(k.fn, "funct")
-            if _funct then -- 通过判断是否有这个上值来区分是否为命名物品功能
-                funct = _funct
-                k.processor:RemoveHandler(k) -- 删除Alt键+左键命名物品功能
-            else -- 还有另一个是中键收纳功能
-                local fn_linedefined = debug.getinfo(k.fn).linedefined
-                if fn_linedefined > 950 and fn_linedefined < 970 then -- 中键收纳当前定义在第961行
-                    k.processor:RemoveHandler(k) -- 也是先删除后面自己加新的
-                end
+            local fn_linedefined = debug.getinfo(k.fn).linedefined
+            if fn_linedefined > 620 and fn_linedefined < 640 then -- 中键收纳: 632
+                k.processor:RemoveHandler(k) -- 先删除后面自己加新的
             end
         end
     end
 
     --------------------------------------------------- 添加我制作的新的快捷键 ---------------------------------------------------
 
-    -- Ctrl+Alt+左键命名物品
-    local keys = {KEY_LALT, KEY_LCTRL}
-    TheInput:AddMouseButtonHandler(function(button, down, x, y)
-        if not down then return end
-
-        for _, v in pairs(keys) do
-            if not TheInput:IsKeyDown(v) then
-                return
-            end
-        end
-
-        if button == MOUSEBUTTON_LEFT then
-            funct()
-        end
-    end)
-
     Memory.refreshhighlight_range = modconfig.refreshhighlight_range -- 使用原模组留的方法修改箱子搜索范围
     -- 可靠的中键收纳
     local enabled_showme_or_insight = KnownModIndex:IsModEnabledAny("workshop-2189004162") or MOD_RPC.ShowMeSHint -- 检测是否开启 Show Me 或者 Insight 模组
     TheInput:AddMouseButtonHandler(function(button, down, x, y)
         if not down then return false end
-        if button == MOUSEBUTTON_MIDDLE and not TheInput:IsKeyDown(KEY_LALT) and not TheInput:IsKeyDown(KEY_LCTRL) and not TheInput:IsKeyDown(KEY_LSHIFT) then
+        if button == MOUSEBUTTON_MIDDLE and not TheInput:IsControlPressed(CONTROL_FORCE_INSPECT) and not TheInput:IsControlPressed(CONTROL_FORCE_STACK) and not TheInput:IsControlPressed(CONTROL_FORCE_TRADE) then
             local target = TheInput:GetHUDEntityUnderMouse()
             local item = target and target.widget ~= nil and target.widget.parent ~= nil and target.widget.parent.item
             if item then
                 local aimbox = FindEntity(ThePlayer, modconfig.refreshhighlight_range, function(inst)
-                    if not inst:HasTag('_container') and not Memory.specialcon[inst.prefab] then return false end
+                    if not Memory:IsMemoryContainer(inst) then return false end
 
                     if not Memory:CanPutin(inst, item) then return end -- 检查是否可以放入
 

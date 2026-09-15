@@ -9,7 +9,7 @@ description = "众所周知，【萌萌的新】有很多非常优秀的MOD，�
 author = "冰冰羊"
 
 -- 版本
-version = "2026-08-23"
+version = "2026-09-16"
 
 -- klei官方论坛地址，为空则默认是工坊的地址
 -- forumthread = ""
