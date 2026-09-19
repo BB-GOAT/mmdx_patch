@@ -27,10 +27,11 @@ AddGamePostInit(function()
     end
     ---------------------------------------------------------------------------------------------------------------------------------------------------------
 
-    -- 检测是否开启其它高亮显示相同物品模组
-    local enabled_other_highlight_mod = KnownModIndex:IsModEnabledAny("workshop-2189004162")
-                                        or MOD_RPC.ShowMeSHint
-                                        or MOD_RPC.FINDER_REDUX
+    -- 是否开启 Show Me 或者 Insight 模组
+    local enabled_insight = KnownModIndex:IsModEnabledAny("workshop-2189004162")
+    local enabled_showme_or_insight = enabled_insight or MOD_RPC.ShowMeSHint
+    -- 是否开启其它高亮显示相同物品模组
+    local enabled_other_highlight_mod = enabled_showme_or_insight or MOD_RPC.FINDER_REDUX
 
     --------------------------------------------------- 高亮显示功能防冲突 ---------------------------------------------------
 
@@ -55,7 +56,6 @@ AddGamePostInit(function()
 
     Memory.refreshhighlight_range = modconfig.refreshhighlight_range -- 使用原模组留的方法修改箱子搜索范围
     -- 可靠的中键收纳
-    local enabled_showme_or_insight = KnownModIndex:IsModEnabledAny("workshop-2189004162") or MOD_RPC.ShowMeSHint -- 检测是否开启 Show Me 或者 Insight 模组
     TheInput:AddMouseButtonHandler(function(button, down, x, y)
         if not down then return false end
         if button == MOUSEBUTTON_MIDDLE and not TheInput:IsControlPressed(CONTROL_FORCE_INSPECT) and not TheInput:IsControlPressed(CONTROL_FORCE_STACK) and not TheInput:IsControlPressed(CONTROL_FORCE_TRADE) then
@@ -118,6 +118,9 @@ AddGamePostInit(function()
                                 else
                                     ThePlayer.components.playercontroller:RemoteControllerUseItemOnSceneFromInvTile(buffaction, item)
                                 end
+                                -- 清理高亮
+                                local ClearHighLight = Upvaluehelper.GetUpvalue(CLIENT_MOD_RPC_HANDLERS["FINDER_REDUX"][FINDER_REDUX_HIGHLIGHT_id], "ClearHighLight")
+                                if ClearHighLight then ClearHighLight() end
                             end
                         end
                     end)
@@ -126,32 +129,153 @@ AddGamePostInit(function()
         end
     end)
 
-    --------------------------------------------------- 禁用打包带信息记录 ---------------------------------------------------
+    --------------------------------------------------- 右键收集物品兼容【高亮查找】【快捷收集整理存放】模组 ---------------------------------------------------
 
-    -- 获取模组信息内的PrefabPostInit
-    local PrefabPostInit_bundle_container = Upvaluehelper.Getmoddata("workshop-3144028272", "PrefabPostInit", "bundle_container")
-    local PrefabPostInit_gift = Upvaluehelper.Getmoddata("workshop-3144028272", "PrefabPostInit", "gift")
-    local PrefabPostInit_bundle = Upvaluehelper.Getmoddata("workshop-3144028272", "PrefabPostInit", "bundle")
+    if KnownModIndex:IsModEnabledAny("workshop-3688371172") and _G.GetModConfigData("EnableCollect", "workshop-3688371172") then
+        -- 你的意思是开起了快捷收集整理存放【重制版】模组，并且开启了收集功能？ 
+        function Memory:FindPrefab(prefab, num, animbox, deepth) -- 覆盖法警告
+            local item = FindEntity(ThePlayer, 80, function(inst) -- 只捡地面物品，不过如果收集模组从箱子里拿了物品玩家也仍然会尝试捡物品（那就捡起来入箱！）
+                return inst.prefab == prefab
+            end)
+            if item then
+                self:DoSceneAction(item, ACTIONS.PICKUP)
+            end
+        end
+    elseif MOD_RPC.FINDER_REDUX and not enabled_insight then -- 开启【高亮查找】模组后show me的高亮就不工作了
+        function Memory:FindPrefab(prefab, num, animbox, deepth) -- 覆盖法警告
+            deepth = deepth or 0
+            if deepth > 7 then return end
 
-    -- 删全局环境的PrefabPostInit
-    local modprefabinitfns = Upvaluehelper.GetUpvalue(SpawnPrefabFromSim,"modprefabinitfns")
-    local function Remove_PrefabPostInit(name, fns)
-        if not fns then return end
+            if not prefab then return end
 
-        local postinit = modprefabinitfns[name]
-        if not postinit then return end
+            local box = animbox or FindEntity(ThePlayer, 30, function(inst)
+                if not self:IsMemoryContainer(inst) then return false end
+                local isgrandowner = inst.replica.inventoryitem and inst.replica.inventoryitem:IsGrandOwner(ThePlayer)
+                if isgrandowner then
+                    return
+                end
+                -- if Memory:CheckShowmeAndInsight(inst, prefab) then
+                --     return true
+                -- end
+                if inst.replica.container and inst.replica.container:IsOpenedBy(ThePlayer)
+                    and inst.replica.container:Has(prefab, 1) then
+                    return true
+                end
+                -- if inst.ShowMe_chest_table or ThePlayer and ThePlayer.replica.insight then return end
+                local mdata = Memory:GetContainer_mmdxdata(inst)
 
-        for i,v in pairs(postinit) do
-            local origin_fn = Upvaluehelper.GetUpvalue(v, "fn")
-            if origin_fn == fns[1] then
-                modprefabinitfns[name][i] = nil
+                local containerdata = mdata and mdata.containerdata
+                if containerdata then
+                    if Memory:Findindata(containerdata, prefab) then --只需要知道我又没有这个东西，有就去拿就行
+                        return true
+                    end
+                end
+            end)
+            if box and Memory.specialcon[box.prefab] then
+                for k, v in pairs(ThePlayer.replica.inventory:GetOpenContainers()) do
+                    if k and k.prefab and Memory.specialcon[k.prefab] == Memory.specialcon[box.prefab] then
+                        box = k
+                        break
+                    end
+                end
+            end
+
+            if box then
+                if box.replica.container and box.replica.container:IsOpenedBy(ThePlayer) then
+                    local item, k = INV_util:FindInCon(box, prefab)
+                    if num and item then
+                        local nowsize = ENT_util:GetStacksize(item) or 1
+                        local a = nowsize - num
+                        local maxsize = ENT_util:GetMaxSize(item)
+                        if maxsize == math.huge and nowsize >= ENT_util:GetRealMaxSize(item) then --必须要特殊的方法拿出
+                            if a > 0 then
+                                local animitem, animk, animcon = INV_util:FindInInv(item.prefab, nil, nil, function(inst)
+                                    local Size = ENT_util:GetStacksize(inst)
+                                    return Size + num <= ENT_util:GetMaxSize(inst)
+                                end, { container = true, equips = true })
+                                if animitem then
+                                    SendRPCToServer(RPC.TakeActiveItemFromCountOfSlot, k, box, num)
+                                    SendRPCToServer(RPC.AddAllOfActiveItemToSlot, animk, animcon, nil)
+                                else
+                                    SendRPCToServer(RPC.TakeActiveItemFromCountOfSlot, k, box, num)
+                                    local pos, con = INV_util:FindEmptySlot()
+                                    SendRPCToServer(RPC.PutAllOfActiveItemInSlot, pos, con, nil)
+                                end
+                            else
+                                SendRPCToServer(RPC.MoveItemFromAllOfSlot, k, box, nil)
+                            end
+                        elseif a > 0 then
+                            SendRPCToServer(RPC.TakeActiveItemFromCountOfSlot, k, box, a)
+                            SendRPCToServer(RPC.MoveItemFromAllOfSlot, k, box, nil, nil)
+                            SendRPCToServer(RPC.PutAllOfActiveItemInSlot, k, box, nil, nil)
+                        else
+                            SendRPCToServer(RPC.MoveItemFromAllOfSlot, k, box, nil)
+                            if a ~= 0 then
+                                ThePlayer:DoTaskInTime(0.1, function()
+                                    self:FindPrefab(prefab, -a, box, deepth + 1)
+                                end)
+                            end
+                        end
+                    elseif k then
+                        SendRPCToServer(RPC.MoveItemFromAllOfSlot, k, box, nil)
+                    end
+                else
+                    self:DoSceneAction(box, ACTIONS.RUMMAGE)
+                end
+            else
+                box = FindEntity(ThePlayer, 80, function(inst)
+                    return inst.prefab == prefab
+                end)
+                if box then
+                    self:DoSceneAction(box, ACTIONS.PICKUP)
+                else
+                    -- 新增逻辑
+                    SendModRPCToServer(MOD_RPC["FINDER_REDUX"]["FIND"], prefab)
+                    ThePlayer:DoTaskInTime(0.1, function()
+                        local FINDER_REDUX_HIGHLIGHT_id = table.typecheckedgetfield(CLIENT_MOD_RPC, "number", "FINDER_REDUX", "HIGHLIGHT", "id")
+                        if FINDER_REDUX_HIGHLIGHT_id then
+                            local HIGHLITED_ENTS = Upvaluehelper.GetUpvalue(CLIENT_MOD_RPC_HANDLERS["FINDER_REDUX"][FINDER_REDUX_HIGHLIGHT_id], "HIGHLITED_ENTS")
+                            local box = HIGHLITED_ENTS and HIGHLITED_ENTS[1]
+                            if box then
+                                self:DoSceneAction(box, ACTIONS.RUMMAGE)
+                                -- 清理高亮
+                                local ClearHighLight = Upvaluehelper.GetUpvalue(CLIENT_MOD_RPC_HANDLERS["FINDER_REDUX"][FINDER_REDUX_HIGHLIGHT_id], "ClearHighLight")
+                                if ClearHighLight then ClearHighLight() end
+                            end
+                        end
+                    end)
+                end
             end
         end
     end
+    --------------------------------------------------- 禁用打包带信息记录 ---------------------------------------------------
 
-    Remove_PrefabPostInit("bundle_container", PrefabPostInit_bundle_container)
-    Remove_PrefabPostInit("gift", PrefabPostInit_gift)
-    Remove_PrefabPostInit("bundle", PrefabPostInit_bundle)
+    -- 获取模组信息内的PrefabPostInit
+    if enabled_showme_or_insight then
+        local PrefabPostInit_bundle_container = Upvaluehelper.Getmoddata("workshop-3144028272", "PrefabPostInit", "bundle_container")
+        local PrefabPostInit_gift = Upvaluehelper.Getmoddata("workshop-3144028272", "PrefabPostInit", "gift")
+        local PrefabPostInit_bundle = Upvaluehelper.Getmoddata("workshop-3144028272", "PrefabPostInit", "bundle")
+
+        -- 删全局环境的PrefabPostInit
+        local modprefabinitfns = Upvaluehelper.GetUpvalue(SpawnPrefabFromSim,"modprefabinitfns")
+        local function Remove_PrefabPostInit(name, fns)
+            if not fns then return end
+
+            local postinit = modprefabinitfns[name]
+            if not postinit then return end
+
+            for i,v in pairs(postinit) do
+                local origin_fn = Upvaluehelper.GetUpvalue(v, "fn")
+                if origin_fn == fns[1] then
+                    modprefabinitfns[name][i] = nil
+                end
+            end
+        end
+
+        Remove_PrefabPostInit("bundle_container", PrefabPostInit_bundle_container)
+        Remove_PrefabPostInit("gift", PrefabPostInit_gift)
+        Remove_PrefabPostInit("bundle", PrefabPostInit_bundle)
+    end
 end)
 
 ---------------------------------------------------------------------------------------------------------------------------------------------------------
