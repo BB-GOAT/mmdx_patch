@@ -5,9 +5,7 @@ local modconfig = {
 }
 
 -- 记忆力模组修改
-do
-    if not rawget(_G, "GetContainer_mmdxdata") then return end
-
+if rawget(_G, "GetContainer_mmdxdata") then
     local Memory = _G.MMDX_MEMORY
     if not Memory then MOD_util:Warning("获取 记忆力 模组的 Memory 失败") return end
     local bancontainers = Upvaluehelper.GetUpvalue(Memory.GetContainerDataKey, "bancontainers")
@@ -375,6 +373,7 @@ do
             newbundle = true
         end)
     end
+
 end
 
 ---------------------------------------------------------------------------------------------------------------------------------------------------------
