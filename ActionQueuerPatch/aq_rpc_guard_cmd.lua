@@ -10,7 +10,7 @@ function BBGOAT_FN.Clear_AQ_RPC_Hander(player)
     -- 延迟执行并捕获 player；不能在 RPC 遍历期间改队列。
     state.task = player:DoTaskInTime(0, function()
         state.task = nil
-        if not player:IsValid() or player._aq_rpc_guard_state ~= state then return end
+        if not player:IsValid() then return end
 
         local queue = getval(HandleRPCQueue, "RPC_Queue")
         local limiter = getval(HandleRPCQueue, "RPC_Queue_Limiter")

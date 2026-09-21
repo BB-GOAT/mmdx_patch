@@ -362,11 +362,11 @@ local ActionQueuer
 if GetModConfigData("aq_rpc_guard") then
     -- Hook【黑化排队论】的 self.DropItem
     AddClassPostConstruct("widgets/invslot", function(self)
-        local original_DropItem, fn_i, pre_fn = Upvaluehelper.FindUpvalue(self.DropItem, "olddrop", "/mods/workshop%-3136701076/modmain.lua")
-        if original_DropItem and fn_i and pre_fn then
-            local _fn, _fn_i, _pre_fn
+        local original_DropItem, fn_i, mmdx_fn = Upvaluehelper.FindUpvalue(self.DropItem, "olddrop", "/mods/workshop%-3136701076/modmain.lua")
+        if original_DropItem and fn_i and mmdx_fn then
+            local _mmdx_fn, _fn_i, _pre_fn
             if debug.getinfo(self.DropItem, "S").source ~= "../mods/workshop-3136701076/modmain.lua" then
-                _fn, _fn_i, _pre_fn = Upvaluehelper.FindUpvalue(self.DropItem, true, nil, function(fn) if type(fn) == "function" and debug.getinfo(fn, "S").source == "../mods/workshop-3136701076/modmain.lua" then return true end end)
+                _mmdx_fn, _fn_i, _pre_fn = Upvaluehelper.FindUpvalue(self.DropItem, true, nil, function(fn) if type(fn) == "function" and debug.getinfo(fn, "S").source == "../mods/workshop-3136701076/modmain.lua" then return true end end)
             end
             local new_fn = function(self, wholestack)
                 local _ThePlayer_DoPeriodicTask = ThePlayer.DoPeriodicTask
@@ -379,7 +379,7 @@ if GetModConfigData("aq_rpc_guard") then
                     end
                     return _ThePlayer_DoPeriodicTask(self, time, hooked_fn, initialdelay, ...)
                 end
-                pre_fn(self, wholestack)
+                mmdx_fn(self, wholestack)
                 ThePlayer.DoPeriodicTask = _ThePlayer_DoPeriodicTask
             end
 
