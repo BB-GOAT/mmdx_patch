@@ -102,10 +102,11 @@ if not rawget(GLOBAL, "BBGOAT_utils") then
     return
 end
 
-Upvaluehelper = GLOBAL.BBGOAT_utils.Upvaluehelper
-MOD_util = GLOBAL.BBGOAT_utils.MOD_util
+Upvaluehelper = _G.BBGOAT_utils.Upvaluehelper
+MOD_util = _G.BBGOAT_utils.MOD_util
+BBGOAT_util = _G.BBGOAT_utils.BBGOAT_util
 
-modimport("ban_print.lua") -- 关掉萌萌的新print的垃圾消息(你是话痨吗)
+modimport("ban_print.lua") -- 关掉萌萌的新print的垃圾消息(你是话血吗)
 modimport("hook_getupvalue") -- 将萌萌的新模组里的getupvalue替换为我的版本
 modimport("hook_mmdx.lua") -- HOOK 萌萌的新的模组
 

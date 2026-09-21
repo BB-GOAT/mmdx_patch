@@ -30,16 +30,38 @@ all_clients_require_mod = false
 -- 饥荒api版本，固定填10
 api_version = 10
 
+
+local enable_disable_options = {
+	{ description = "开启", data = true },
+	{ description = "关闭", data = false },
+}
+
 ---@param label string|nil 标题
 ---@return table
 local function SkipSpace(label)
 	return { name = "",label = label, hover = "", options = { { description = "", data = false }, }, default = false}
 end
 
+---@param name string
+---@param label string|nil
+---@param default any
+---@param options table|nil
+---@param hover string|nil
+---@return table
+local function AddConfig(name, label, default, options, hover)
+	return {
+		name = name,
+		label = label,
+		hover = hover or "",
+		options = options or enable_disable_options,
+		default = default,
+	}
+end
+
 -- mod的配置项
 configuration_options =
 {
-    SkipSpace("记忆力模组"),
+    SkipSpace("记忆力"),
     {
         name = "refreshhighlight_range",
         label = "搜索范围",
@@ -55,10 +77,15 @@ configuration_options =
             {description = "50", data = 50},
             {description = "55", data = 55},
             {description = "60", data = 60},
-            {description = "65", data = 65, hover = "默认值"},
+            {description = "65", data = 65},
             {description = "70", data = 70},
+            {description = "75", data = 75},
+            {description = "80", data = 80, hover = "默认值"},
         },
-        default = 65,
+        default = 80,
+        slider_data = {20, 80, 5}, -- 兼容配置扩展模组：最小值、最大值、步长
     },
+    SkipSpace("黑化排队论"),
+	AddConfig("aq_rpc_guard", "自动清理排队论RPC积压", true, enable_disable_options, "仅服务器管理员生效。排队论工作时检查 RPC 积压，保留最新工作请求并清理过时请求。\n防止排队论工作时因服务器卡顿造成的持续影响"),
     SkipSpace("如果你想要其它模组设置，请留言让我添加")
 }

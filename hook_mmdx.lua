@@ -427,161 +427,263 @@ end)
 ---------------------------------------------------------------------------------------------------------------------------------------------------------
 
 -- 修改“黑化排队论”模组
+
+if KnownModIndex:IsModEnabledAny("workshop-3136701076") then
+
+local ActionQueuer
+if GetModConfigData("aq_rpc_guard") then
+    -- 覆盖法警告：修改【黑化排队论】的 self.DropItem
+    AddClassPostConstruct("widgets/invslot", function(self)
+        local original_DropItem, fn_i, pre_fn = Upvaluehelper.FindUpvalue(self.DropItem, "olddrop", "/mods/workshop%-3136701076/modmain.lua")
+        if original_DropItem and fn_i and pre_fn then
+            local _fn, _fn_i, _pre_fn
+            if debug.getinfo(self.DropItem, "S").source ~= "../mods/workshop-3136701076/modmain.lua" then
+                _fn, _fn_i, _pre_fn = Upvaluehelper.FindUpvalue(self.DropItem, true, nil, function(fn) if type(fn) == "function" and debug.getinfo(fn, "S").source == "../mods/workshop-3136701076/modmain.lua" then return true end end)
+            end
+
+            local task
+            local lastdrop = Upvaluehelper.GetUpvalue(pre_fn, "lastdrop")
+            local banitem = Upvaluehelper.GetUpvalue(pre_fn, "banitem")
+            local default_dropcheck_internal = Upvaluehelper.GetUpvalue(pre_fn, "default_dropcheck_internal")
+            local new_fn = function(self, wholestack)
+                if self.owner == lastdrop.owner and self.tile == lastdrop.tile and GetTime() - lastdrop.time < default_dropcheck_internal then
+                    if task then task:Cancel() end
+                    if lastdrop.item and banitem[lastdrop.item.prefab] then
+                    else
+                        local item = _G.INV_util:FindInInv(nil, nil, nil, function(inst)
+                            if inst.prefab == lastdrop.item.prefab or ActionQueuer and ActionQueuer.RegardAsSame
+                                and ActionQueuer.RegardAsSame(ActionQueuer, lastdrop.item.prefab, inst) then
+                                return true
+                            end
+                        end)
+                        --banitem
+                        task = ThePlayer:DoPeriodicTask(FRAMES, function()
+                            if item and item:IsValid() and ThePlayer.replica.inventory:IsHolding(item, true) then
+                            else
+                                item = lastdrop.item and _G.INV_util:FindInInv(nil, nil, nil, function(inst)
+                                    if inst.prefab == lastdrop.item.prefab or ActionQueuer and ActionQueuer.RegardAsSame
+                                        and ActionQueuer.RegardAsSame(ActionQueuer, lastdrop.item.prefab, inst) then
+                                        return true
+                                    end
+                                end)
+                            end
+                            if not item or _G.KEY_util:MoveKeyDown() then
+                                task:Cancel()
+                                task = nil
+                                return -- 新增的return
+                            end
+
+                            SendRPCToServer(RPC.DropItemFromInvTile, item, wholestack or nil)
+                            -- 新增内容
+                            if ActionQueuer.rpc_queue_guard then
+                                ActionQueuer.rpc_queue_guard:KeepAlive()
+                            end
+                        end)
+                        return
+                    end
+                end
+                if self.owner and self.owner.replica.inventory and self.tile and self.tile.item then
+                    lastdrop.owner = self.owner
+                    lastdrop.tile = self.tile
+                    lastdrop.item = self.tile.item
+                    lastdrop.time = GetTime()
+                end
+                return original_DropItem(self, wholestack)
+            end
+
+            if _fn_i and _pre_fn then
+                debug.setupvalue(_pre_fn, _fn_i, new_fn)
+            else
+                self.DropItem = new_fn
+            end
+        end
+    end)
+end
+
 AddComponentPostInit("playercontroller", function(self, inst)
     if inst ~= ThePlayer then return end
-    -- ThePlayer:DoTaskInTime(0, function()
-        local ActionQueuer = Upvaluehelper.FindUpvalue(self.OnControl, "ActionQueuer", "/mods/workshop%-3136701076/modmain.lua") -- 尝试获取黑化排队论的ActionQueuer
-        if not ActionQueuer then MOD_util:Warning("获取 黑化排队论 模组的 ActionQueuer 失败") return end
+    ActionQueuer = Upvaluehelper.FindUpvalue(self.OnControl, "ActionQueuer", "/mods/workshop%-3136701076/modmain.lua") -- 尝试获取黑化排队论的ActionQueuer
+    if not ActionQueuer then error("获取 黑化排队论 模组的 ActionQueuer 失败") return end
 
-        local env = ModManager:GetMod("workshop-3136701076").env
-        local INV_util = env.INV_util
-        local POS_util = env.POS_util
-        local ENT_util = env.ENT_util
-        local MOD_util = env.MOD_util
-        local dont_controller_prefab = {
-            ["luckysimulator"] = true -- 欧皇模拟器：老虎机
-        }
-        -- 修改行为学的SendControllerRPCSafely函数
-        local old_SendControllerRPCSafely = ActionQueuer.SendControllerRPCSafely
-        function ActionQueuer:SendControllerRPCSafely(actioncode, item, target, modname, ...)
-            if dont_controller_prefab[target.prefab] then
-                if INV_util:GetActiveItem() then
-                    SendRPCToServer(RPC.LeftClick, actioncode, target:GetPosition().x,
-                        target:GetPosition().z,
-                        target, nil, nil, true, modname)
-                else
-                    POS_util:GoToPoint(target:GetPosition().x,
-                        target:GetPosition().z)
-                end
+    -------------------------------------------------- 自动清理排队论RPC积压 --------------------------------------------------
+
+    local function import_rpc_guard()
+        modimport("ActionQueuerPatch/aq_rpc_guard.lua")
+        ActionQueuer.rpc_queue_guard = CreateRPCQueueGuard(ActionQueuer)
+    end
+    if TheNet:GetIsClient() and GetModConfigData("aq_rpc_guard") then
+        if TheNet:GetIsServerAdmin() then
+            import_rpc_guard()
+        end
+        if rawget(_G, "GetedAdminPostInitFns") then
+            table.insert(_G.GetedAdminPostInitFns, function()
+                import_rpc_guard()
+            end)
+        end
+    end
+
+    local old_ClearActionThread = ActionQueuer.ClearActionThread
+    function ActionQueuer:ClearActionThread(notclosemovement, ...)
+        old_ClearActionThread(self, notclosemovement, ...)
+        if not notclosemovement then
+            if self.action_thread ~= nil and self.rpc_queue_guard then
+                self.rpc_queue_guard:Finish()
+            end
+        end
+    end
+
+    --------------------------------------------------------------------------------------------------------------------------
+
+    local env = ModManager:GetMod("workshop-3136701076").env
+    local INV_util = env.INV_util
+    local POS_util = env.POS_util
+    local ENT_util = env.ENT_util
+    local MOD_util = env.MOD_util
+    local dont_controller_prefab = {
+        ["luckysimulator"] = true -- 欧皇模拟器：老虎机
+    }
+    -- 修改行为学的SendControllerRPCSafely函数
+    local old_SendControllerRPCSafely = ActionQueuer.SendControllerRPCSafely
+    function ActionQueuer:SendControllerRPCSafely(actioncode, item, target, modname, ...)
+        if dont_controller_prefab[target.prefab] then
+            if INV_util:GetActiveItem() then
+                SendRPCToServer(RPC.LeftClick, actioncode, target:GetPosition().x,
+                    target:GetPosition().z,
+                    target, nil, nil, true, modname)
             else
-                old_SendControllerRPCSafely(self, actioncode, item, target, modname, ...)
+                POS_util:GoToPoint(target:GetPosition().x,
+                    target:GetPosition().z)
+            end
+        else
+            old_SendControllerRPCSafely(self, actioncode, item, target, modname, ...)
+        end
+    end
+
+    local allowed_actions = Upvaluehelper.GetUpvalue(ActionQueuer.GetAction, "allowed_actions")
+    if allowed_actions then
+        -- 可靠的快速捡物品
+        local pickup_pst_flag = false
+        local _breakfn = allowed_actions["PICKUP"].breakfn
+        allowed_actions["PICKUP"].breakfn = function(act)
+            local selecttable = act.self and act.self:GetSelectedEnt(act.target)
+            if selecttable then
+                if selecttable.rightclick then -- 右键，走原来的不可靠快速捡东西
+                    return _breakfn(act)
+                else -- 左键，使用我写的快速捡东西
+                    local pickup_pst_anim = act.self.inst.AnimState:IsCurrentAnimation("pickup_pst")
+                    if act.time > 0.1 and (pickup_pst_anim) and pickup_pst_flag and act.self:HaveAnotherSelectedEnt(act.target) then
+                        pickup_pst_flag = false
+                        return true
+                    elseif not pickup_pst_anim then
+                        pickup_pst_flag = true
+                    end
+                end
             end
         end
 
-        local allowed_actions = Upvaluehelper.GetUpvalue(ActionQueuer.GetAction, "allowed_actions")
-        if allowed_actions then
-            -- 可靠的快速捡物品
-            local pickup_pst_flag = false
-            local _breakfn = allowed_actions["PICKUP"].breakfn
-            allowed_actions["PICKUP"].breakfn = function(act)
-                local selecttable = act.self and act.self:GetSelectedEnt(act.target)
-                if selecttable then
-                    if selecttable.rightclick then -- 右键，走原来的不可靠快速捡东西
-                        return _breakfn(act)
-                    else -- 左键，使用我写的快速捡东西
-                        local pickup_pst_anim = act.self.inst.AnimState:IsCurrentAnimation("pickup_pst")
-                        if act.time > 0.1 and (pickup_pst_anim) and pickup_pst_flag and act.self:HaveAnotherSelectedEnt(act.target) then
-                            pickup_pst_flag = false
-                            return true
-                        elseif not pickup_pst_anim then
-                            pickup_pst_flag = true
-                        end
-                    end
-                end
+        -- 解决砍巨石枝时卡顿的问题
+        local chop_rock_tree_flag = false
+        local DealWx78_spinact = Upvaluehelper.GetUpvalue(allowed_actions["CHOP"].rpc, "DealWx78_spinact")
+        allowed_actions["CHOP"].rpc = function(act)
+            local target = act.target
+            if DealWx78_spinact(act, ACTIONS.CHOP.code) then
+                return
             end
-
-            -- 解决砍巨石枝时卡顿的问题
-            local chop_rock_tree_flag = false
-            local DealWx78_spinact = Upvaluehelper.GetUpvalue(allowed_actions["CHOP"].rpc, "DealWx78_spinact")
-            allowed_actions["CHOP"].rpc = function(act)
-                local target = act.target
-                if DealWx78_spinact(act, ACTIONS.CHOP.code) then
-                    return
-                end
-                if target and target:HasTag("rock_tree") then --tree_rock1
-                    local anim = ENT_util:GetAnimation(target)
-                    if anim and (anim:find('fall_pre') or anim:find("fall_miss") or anim:find("fall_bounce")) then
-                        if not chop_rock_tree_flag then
-                            local pos = POS_util:CalculateAimPos(target, ThePlayer, 0,
-                                (target:HasTag("tree_rock1") and 3 or 4) + 0.5)
-                            local speeditem
-                            speeditem = ActionQueuer:HasAddSpeedEquipment()
-                            ActionQueuer:EquipItem(speeditem)
-                            ActionQueuer.waiting_for_break = 1
-                            POS_util:GoToPoint(pos.x, pos.z)
-                            chop_rock_tree_flag = true
-                        end
-                    else
-                        chop_rock_tree_flag = false
-                        SendRPCToServer(RPC.LeftClick, ACTIONS.CHOP.code, act.target:GetPosition().x,
-                            act.target:GetPosition().z,
-                            act.target)
+            if target and target:HasTag("rock_tree") then --tree_rock1
+                local anim = ENT_util:GetAnimation(target)
+                if anim and (anim:find('fall_pre') or anim:find("fall_miss") or anim:find("fall_bounce")) then
+                    if not chop_rock_tree_flag then
+                        local pos = POS_util:CalculateAimPos(target, ThePlayer, 0,
+                            (target:HasTag("tree_rock1") and 3 or 4) + 0.5)
+                        local speeditem
+                        speeditem = ActionQueuer:HasAddSpeedEquipment()
+                        ActionQueuer:EquipItem(speeditem)
+                        ActionQueuer.waiting_for_break = 1
+                        POS_util:GoToPoint(pos.x, pos.z)
+                        chop_rock_tree_flag = true
                     end
                 else
-                    SendRPCToServer(RPC.LeftClick, ACTIONS.CHOP.code, act.target:GetPosition().x, act.target:GetPosition().z,
+                    chop_rock_tree_flag = false
+                    SendRPCToServer(RPC.LeftClick, ACTIONS.CHOP.code, act.target:GetPosition().x,
+                        act.target:GetPosition().z,
                         act.target)
                 end
-            end
-
-            -- 修改关于晾肉架的操作
-            -- 晒肉时，跳过已经有肉的架子
-            local STORE_breakfn = allowed_actions['STORE'].breakfn
-            allowed_actions['STORE'].breakfn = function(act)
-                if STORE_breakfn(act) then
-                    return true
-                end
-                if allowed_actions.RUMMAGE.meatrack_list[act.target.prefab] then -- 仅对晾肉架生效
-                    local num = act.target.replica.container and act.target.replica.container:GetNumSlots() or 3 -- 获取晾肉架的格子数
-                    for i = 1, num do
-                        local build, sym = act.target.AnimState:GetSymbolOverride("swap_dried" .. i)
-                        if not (build or sym) then -- 查找空格子
-                            return false
-                        end
-                    end
-                    return true -- 所有格子都有肉
-                end
-            end
-            allowed_actions['STORE'].controllertable = {
-                needreturnactiveitem = function(act)
-                    -- 晒肉时将鼠标上的物品放回物品栏
-                    return act.item and act.item:HasTag("dryable") and
-                            act.target and act.target.prefab and allowed_actions.RUMMAGE.meatrack_list[act.target.prefab]
-                end,
-            }
-
-            local RUMMAGE_breakfn = allowed_actions['RUMMAGE'].breakfn
-            allowed_actions['RUMMAGE'].breakfn = function(act)
-                if RUMMAGE_breakfn(act) then
-                    return true
-                end
-                if allowed_actions.RUMMAGE.meatrack_list[act.target.prefab] then -- 仅对晾肉架生效
-                    local num = act.target.replica.container and act.target.replica.container:GetNumSlots() or 3 -- 获取晾肉架的格子数
-                    for i = 1, num do
-                        local build, sym = act.target.AnimState:GetSymbolOverride("swap_dried" .. i)
-                        if build or sym then -- 查找有物品的格子
-                            return false
-                        end
-                    end
-                    return not TheInput:IsKeyDown(KEY_LSHIFT) -- 所有格子都是空的 且没有按住Shift
-                end
-            end
-
-            -- 兼容【古川笠的快速采集】模组，使用flag标记阻止重复开启容器
-            if KnownModIndex:IsModEnabledAny("workshop-2158549297") then
-                local flag
-                local old_RUMMAGE_rpc = allowed_actions['RUMMAGE'].rpc
-                allowed_actions['RUMMAGE'].rpc = function(act)
-                    if flag then
-                        flag = false
-                        return old_RUMMAGE_rpc(act)
-                    end
-                end
-                allowed_actions['RUMMAGE'].act_pre_fn = function(act, self)
-                    flag = true
-                end
+            else
+                SendRPCToServer(RPC.LeftClick, ACTIONS.CHOP.code, act.target:GetPosition().x, act.target:GetPosition().z,
+                    act.target)
             end
         end
 
-        -- 排队论工作的时候不因切屏（游戏判定为你按住了强制检查键）影响切装备
-        local _IsControlPressed = _G.TheInput.IsControlPressed
-        function _G.TheInput:IsControlPressed(key)
-            if ActionQueuer.action_thread ~= nil and (key == CONTROL_FORCE_INSPECT) then -- 排队论工作时，强制检查键按钮始终判为未按下
-                return false
+        -- 修改关于晾肉架的操作
+        -- 晒肉时，跳过已经有肉的架子
+        local STORE_breakfn = allowed_actions['STORE'].breakfn
+        allowed_actions['STORE'].breakfn = function(act)
+            if STORE_breakfn(act) then
+                return true
             end
-            return _IsControlPressed(self, key)
+            if allowed_actions.RUMMAGE.meatrack_list[act.target.prefab] then -- 仅对晾肉架生效
+                local num = act.target.replica.container and act.target.replica.container:GetNumSlots() or 3 -- 获取晾肉架的格子数
+                for i = 1, num do
+                    local build, sym = act.target.AnimState:GetSymbolOverride("swap_dried" .. i)
+                    if not (build or sym) then -- 查找空格子
+                        return false
+                    end
+                end
+                return true -- 所有格子都有肉
+            end
         end
-    -- end)
+        allowed_actions['STORE'].controllertable = {
+            needreturnactiveitem = function(act)
+                -- 晒肉时将鼠标上的物品放回物品栏
+                return act.item and act.item:HasTag("dryable") and
+                        act.target and act.target.prefab and allowed_actions.RUMMAGE.meatrack_list[act.target.prefab]
+            end,
+        }
+
+        local RUMMAGE_breakfn = allowed_actions['RUMMAGE'].breakfn
+        allowed_actions['RUMMAGE'].breakfn = function(act)
+            if RUMMAGE_breakfn(act) then
+                return true
+            end
+            if allowed_actions.RUMMAGE.meatrack_list[act.target.prefab] then -- 仅对晾肉架生效
+                local num = act.target.replica.container and act.target.replica.container:GetNumSlots() or 3 -- 获取晾肉架的格子数
+                for i = 1, num do
+                    local build, sym = act.target.AnimState:GetSymbolOverride("swap_dried" .. i)
+                    if build or sym then -- 查找有物品的格子
+                        return false
+                    end
+                end
+                return not TheInput:IsKeyDown(KEY_LSHIFT) -- 所有格子都是空的 且没有按住Shift
+            end
+        end
+
+        -- 兼容【古川笠的快速采集】模组，使用flag标记阻止重复开启容器
+        if KnownModIndex:IsModEnabledAny("workshop-2158549297") then
+            local flag
+            local old_RUMMAGE_rpc = allowed_actions['RUMMAGE'].rpc
+            allowed_actions['RUMMAGE'].rpc = function(act)
+                if flag then
+                    flag = false
+                    return old_RUMMAGE_rpc(act)
+                end
+            end
+            allowed_actions['RUMMAGE'].act_pre_fn = function(act, self)
+                flag = true
+            end
+        end
+    end
+
+    -- 排队论工作的时候不因切屏（游戏判定为你按住了强制检查键）影响切装备
+    local _IsControlPressed = _G.TheInput.IsControlPressed
+    function _G.TheInput:IsControlPressed(key)
+        if ActionQueuer.action_thread ~= nil and (key == CONTROL_FORCE_INSPECT) then -- 排队论工作时，强制检查键按钮始终判为未按下
+            return false
+        end
+        return _IsControlPressed(self, key)
+    end
 end)
+
+end
 
 ---------------------------------------------------------------------------------------------------------------------------------------------------------
 
