@@ -137,7 +137,7 @@ if rawget(_G, "GetContainer_mmdxdata") then
 
     if KnownModIndex:IsModEnabledAny("workshop-3688371172") and _G.GetModConfigData("EnableCollect", "workshop-3688371172") then
         -- 你的意思是开起了快捷收集整理存放【重制版】模组，并且开启了收集功能？ 
-        function Memory:FindPrefab(prefab, num, animbox, deepth) -- 覆盖法警告
+        function Memory:FindPrefab(prefab, num, animbox, deepth) -- 覆盖法警告？
             local item = FindEntity(ThePlayer, 80, function(inst) -- 只捡地面物品，不过如果收集模组从箱子里拿了物品玩家也仍然会尝试捡物品（那就捡起来入箱！）
                 return inst.prefab == prefab
             end)
@@ -146,110 +146,38 @@ if rawget(_G, "GetContainer_mmdxdata") then
             end
         end
     elseif MOD_RPC.FINDER_REDUX and not enabled_insight then -- 开启【高亮查找】模组后show me的高亮就不工作了
-        function Memory:FindPrefab(prefab, num, animbox, deepth) -- 覆盖法警告
-            deepth = deepth or 0
-            if deepth > 7 then return end
-
-            if not prefab then return end
-
-            local box = animbox or FindEntity(ThePlayer, 30, function(inst)
-                if not self:IsMemoryContainer(inst) then return false end
-                local isgrandowner = inst.replica.inventoryitem and inst.replica.inventoryitem:IsGrandOwner(ThePlayer)
-                if isgrandowner then
-                    return
-                end
-                -- if Memory:CheckShowmeAndInsight(inst, prefab) then
-                --     return true
-                -- end
-                if inst.replica.container and inst.replica.container:IsOpenedBy(ThePlayer)
-                    and inst.replica.container:Has(prefab, 1) then
-                    return true
-                end
-                -- if inst.ShowMe_chest_table or ThePlayer and ThePlayer.replica.insight then return end
-                local mdata = Memory:GetContainer_mmdxdata(inst)
-
-                local containerdata = mdata and mdata.containerdata
-                if containerdata then
-                    if Memory:Findindata(containerdata, prefab) then --只需要知道我又没有这个东西，有就去拿就行
-                        return true
-                    end
-                end
-            end)
-            if box and Memory.specialcon[box.prefab] then
-                for k, v in pairs(ThePlayer.replica.inventory:GetOpenContainers()) do
-                    if k and k.prefab and Memory.specialcon[k.prefab] == Memory.specialcon[box.prefab] then
-                        box = k
-                        break
-                    end
-                end
-            end
-
-            if box then
-                if box.replica.container and box.replica.container:IsOpenedBy(ThePlayer) then
-                    local item, k = INV_util:FindInCon(box, prefab)
-                    if num and item then
-                        local nowsize = ENT_util:GetStacksize(item) or 1
-                        local a = nowsize - num
-                        local maxsize = ENT_util:GetMaxSize(item)
-                        if maxsize == math.huge and nowsize >= ENT_util:GetRealMaxSize(item) then --必须要特殊的方法拿出
-                            if a > 0 then
-                                local animitem, animk, animcon = INV_util:FindInInv(item.prefab, nil, nil, function(inst)
-                                    local Size = ENT_util:GetStacksize(inst)
-                                    return Size + num <= ENT_util:GetMaxSize(inst)
-                                end, { container = true, equips = true })
-                                if animitem then
-                                    SendRPCToServer(RPC.TakeActiveItemFromCountOfSlot, k, box, num)
-                                    SendRPCToServer(RPC.AddAllOfActiveItemToSlot, animk, animcon, nil)
-                                else
-                                    SendRPCToServer(RPC.TakeActiveItemFromCountOfSlot, k, box, num)
-                                    local pos, con = INV_util:FindEmptySlot()
-                                    SendRPCToServer(RPC.PutAllOfActiveItemInSlot, pos, con, nil)
+        local _Memory_FindPrefab = Memory.FindPrefab
+        Memory.FindPrefab = function(self, prefab, num, animbox, deepth, ...)
+            local _FindEntity = _G.FindEntity
+            _G.FindEntity = function(inst, radius, fn, musttags, canttags, mustoneoftags, ...)
+                if radius == 80 then -- 如果原模组改了我也得改..
+                    local res = _FindEntity(inst, radius, fn, musttags, canttags, mustoneoftags, ...)
+                    if not res then
+                        -- 新增逻辑
+                        SendModRPCToServer(MOD_RPC["FINDER_REDUX"]["FIND"], prefab)
+                        ThePlayer:DoTaskInTime(0.1, function()
+                            local FINDER_REDUX_HIGHLIGHT_id = table.typecheckedgetfield(CLIENT_MOD_RPC, "number", "FINDER_REDUX", "HIGHLIGHT", "id")
+                            if FINDER_REDUX_HIGHLIGHT_id then
+                                local HIGHLITED_ENTS = Upvaluehelper.GetUpvalue(CLIENT_MOD_RPC_HANDLERS["FINDER_REDUX"][FINDER_REDUX_HIGHLIGHT_id], "HIGHLITED_ENTS")
+                                local box = HIGHLITED_ENTS and HIGHLITED_ENTS[1]
+                                if box then
+                                    self:DoSceneAction(box, ACTIONS.RUMMAGE)
+                                    -- 清理高亮
+                                    local ClearHighLight = Upvaluehelper.GetUpvalue(CLIENT_MOD_RPC_HANDLERS["FINDER_REDUX"][FINDER_REDUX_HIGHLIGHT_id], "ClearHighLight")
+                                    if ClearHighLight then ClearHighLight() end
                                 end
-                            else
-                                SendRPCToServer(RPC.MoveItemFromAllOfSlot, k, box, nil)
                             end
-                        elseif a > 0 then
-                            SendRPCToServer(RPC.TakeActiveItemFromCountOfSlot, k, box, a)
-                            SendRPCToServer(RPC.MoveItemFromAllOfSlot, k, box, nil, nil)
-                            SendRPCToServer(RPC.PutAllOfActiveItemInSlot, k, box, nil, nil)
-                        else
-                            SendRPCToServer(RPC.MoveItemFromAllOfSlot, k, box, nil)
-                            if a ~= 0 then
-                                ThePlayer:DoTaskInTime(0.1, function()
-                                    self:FindPrefab(prefab, -a, box, deepth + 1)
-                                end)
-                            end
-                        end
-                    elseif k then
-                        SendRPCToServer(RPC.MoveItemFromAllOfSlot, k, box, nil)
+                        end)
+                        return res
+                    else
+                        return res
                     end
                 else
-                    self:DoSceneAction(box, ACTIONS.RUMMAGE)
-                end
-            else
-                box = FindEntity(ThePlayer, 80, function(inst)
-                    return inst.prefab == prefab
-                end)
-                if box then
-                    self:DoSceneAction(box, ACTIONS.PICKUP)
-                else
-                    -- 新增逻辑
-                    SendModRPCToServer(MOD_RPC["FINDER_REDUX"]["FIND"], prefab)
-                    ThePlayer:DoTaskInTime(0.1, function()
-                        local FINDER_REDUX_HIGHLIGHT_id = table.typecheckedgetfield(CLIENT_MOD_RPC, "number", "FINDER_REDUX", "HIGHLIGHT", "id")
-                        if FINDER_REDUX_HIGHLIGHT_id then
-                            local HIGHLITED_ENTS = Upvaluehelper.GetUpvalue(CLIENT_MOD_RPC_HANDLERS["FINDER_REDUX"][FINDER_REDUX_HIGHLIGHT_id], "HIGHLITED_ENTS")
-                            local box = HIGHLITED_ENTS and HIGHLITED_ENTS[1]
-                            if box then
-                                self:DoSceneAction(box, ACTIONS.RUMMAGE)
-                                -- 清理高亮
-                                local ClearHighLight = Upvaluehelper.GetUpvalue(CLIENT_MOD_RPC_HANDLERS["FINDER_REDUX"][FINDER_REDUX_HIGHLIGHT_id], "ClearHighLight")
-                                if ClearHighLight then ClearHighLight() end
-                            end
-                        end
-                    end)
+                    return _FindEntity(inst, radius, fn, musttags, canttags, mustoneoftags, ...)
                 end
             end
+            _Memory_FindPrefab(self, prefab, num, animbox, deepth, ...)
+            _G.FindEntity = _FindEntity
         end
     end
 
@@ -432,7 +360,7 @@ if KnownModIndex:IsModEnabledAny("workshop-3136701076") then
 
 local ActionQueuer
 if GetModConfigData("aq_rpc_guard") then
-    -- 覆盖法警告：修改【黑化排队论】的 self.DropItem
+    -- Hook【黑化排队论】的 self.DropItem
     AddClassPostConstruct("widgets/invslot", function(self)
         local original_DropItem, fn_i, pre_fn = Upvaluehelper.FindUpvalue(self.DropItem, "olddrop", "/mods/workshop%-3136701076/modmain.lua")
         if original_DropItem and fn_i and pre_fn then
@@ -440,55 +368,19 @@ if GetModConfigData("aq_rpc_guard") then
             if debug.getinfo(self.DropItem, "S").source ~= "../mods/workshop-3136701076/modmain.lua" then
                 _fn, _fn_i, _pre_fn = Upvaluehelper.FindUpvalue(self.DropItem, true, nil, function(fn) if type(fn) == "function" and debug.getinfo(fn, "S").source == "../mods/workshop-3136701076/modmain.lua" then return true end end)
             end
-
-            local task
-            local lastdrop = Upvaluehelper.GetUpvalue(pre_fn, "lastdrop")
-            local banitem = Upvaluehelper.GetUpvalue(pre_fn, "banitem")
-            local default_dropcheck_internal = Upvaluehelper.GetUpvalue(pre_fn, "default_dropcheck_internal")
             local new_fn = function(self, wholestack)
-                if self.owner == lastdrop.owner and self.tile == lastdrop.tile and GetTime() - lastdrop.time < default_dropcheck_internal then
-                    if task then task:Cancel() end
-                    if lastdrop.item and banitem[lastdrop.item.prefab] then
-                    else
-                        local item = _G.INV_util:FindInInv(nil, nil, nil, function(inst)
-                            if inst.prefab == lastdrop.item.prefab or ActionQueuer and ActionQueuer.RegardAsSame
-                                and ActionQueuer.RegardAsSame(ActionQueuer, lastdrop.item.prefab, inst) then
-                                return true
-                            end
-                        end)
-                        --banitem
-                        task = ThePlayer:DoPeriodicTask(FRAMES, function()
-                            if item and item:IsValid() and ThePlayer.replica.inventory:IsHolding(item, true) then
-                            else
-                                item = lastdrop.item and _G.INV_util:FindInInv(nil, nil, nil, function(inst)
-                                    if inst.prefab == lastdrop.item.prefab or ActionQueuer and ActionQueuer.RegardAsSame
-                                        and ActionQueuer.RegardAsSame(ActionQueuer, lastdrop.item.prefab, inst) then
-                                        return true
-                                    end
-                                end)
-                            end
-                            if not item or _G.KEY_util:MoveKeyDown() then
-                                task:Cancel()
-                                task = nil
-                                return -- 新增的return
-                            end
-
-                            SendRPCToServer(RPC.DropItemFromInvTile, item, wholestack or nil)
-                            -- 新增内容
-                            if ActionQueuer.rpc_queue_guard then
-                                ActionQueuer.rpc_queue_guard:KeepAlive()
-                            end
-                        end)
-                        return
+                local _ThePlayer_DoPeriodicTask = ThePlayer.DoPeriodicTask
+                ThePlayer.DoPeriodicTask = function(self, time, fn, initialdelay, ...)
+                    local hooked_fn = function(...)
+                        fn(...)
+                        if ActionQueuer.rpc_queue_guard then
+                            ActionQueuer.rpc_queue_guard:KeepAlive()
+                        end
                     end
+                    return _ThePlayer_DoPeriodicTask(self, time, hooked_fn, initialdelay, ...)
                 end
-                if self.owner and self.owner.replica.inventory and self.tile and self.tile.item then
-                    lastdrop.owner = self.owner
-                    lastdrop.tile = self.tile
-                    lastdrop.item = self.tile.item
-                    lastdrop.time = GetTime()
-                end
-                return original_DropItem(self, wholestack)
+                pre_fn(self, wholestack)
+                ThePlayer.DoPeriodicTask = _ThePlayer_DoPeriodicTask
             end
 
             if _fn_i and _pre_fn then
