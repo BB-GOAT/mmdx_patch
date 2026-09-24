@@ -135,19 +135,42 @@ if rawget(_G, "GetContainer_mmdxdata") then
 
     --------------------------------------------------- 右键收集物品兼容【高亮查找】【快捷收集整理存放】模组 ---------------------------------------------------
 
-    if KnownModIndex:IsModEnabledAny("workshop-3688371172") and _G.GetModConfigData("EnableCollect", "workshop-3688371172") then
-        -- 你的意思是开起了快捷收集整理存放【重制版】模组，并且开启了收集功能？ 
-        function Memory:FindPrefab(prefab, num, animbox, deepth) -- 覆盖法警告？
+    -- 是否使用快捷收集整理存放模组
+    local function UseFastCollectSortMod()
+        if KnownModIndex:IsModEnabledAny("workshop-2973455580") then -- 原版
+            local cfg = _G.GetModConfigData("Items collect", "workshop-2973455580")
+            if cfg and type(cfg) == "number" and cfg <= -2 then -- 禁用：false、禁用收集：-1、禁用存放：-2，启用：-3 (默认启用)
+                return true
+            end
+        end
+        if KnownModIndex:IsModEnabledAny("workshop-3785108261") then -- 修复版
+            local cfg = _G.GetModConfigData("Items collect", "workshop-3785108261")
+            if cfg and type(cfg) == "number" and cfg <= -2 then
+                return true
+            end
+        end
+        if KnownModIndex:IsModEnabledAny("workshop-3688371172") then -- 重制版
+            local cfg = _G.GetModConfigData("EnableCollect", "workshop-3688371172")
+            if cfg then
+                return true
+            end
+        end
+        return false
+    end
+
+    -- 是否使用高亮查找模组
+    local UseFindeRMod = MOD_RPC.FINDER_REDUX and not enabled_insight
+
+    local _Memory_FindPrefab = Memory.FindPrefab
+    Memory.FindPrefab = function(self, prefab, num, animbox, deepth, ...)
+        if UseFastCollectSortMod() or TUNING.FastCollectModEnabled then -- 开启了快捷收集存放模组，禁用【记忆力】从容器翻物品行为。备注：TUNING.FastCollectModEnabled是用于兼容其他我不支持的快捷收集模组，需要的玩家请自行想办法把它设为true
             local item = FindEntity(ThePlayer, 80, function(inst) -- 只捡地面物品，不过如果收集模组从箱子里拿了物品玩家也仍然会尝试捡物品（那就捡起来入箱！）
                 return inst.prefab == prefab
             end)
             if item then
                 self:DoSceneAction(item, ACTIONS.PICKUP)
             end
-        end
-    elseif MOD_RPC.FINDER_REDUX and not enabled_insight then -- 开启【高亮查找】模组后show me的高亮就不工作了
-        local _Memory_FindPrefab = Memory.FindPrefab
-        Memory.FindPrefab = function(self, prefab, num, animbox, deepth, ...)
+        elseif UseFindeRMod then -- 开启【高亮查找】模组后show me的高亮就不工作了
             local _FindEntity = _G.FindEntity
             _G.FindEntity = function(inst, radius, fn, musttags, canttags, mustoneoftags, ...)
                 if radius == 80 then -- 如果原模组改了我也得改..
@@ -178,6 +201,8 @@ if rawget(_G, "GetContainer_mmdxdata") then
             end
             _Memory_FindPrefab(self, prefab, num, animbox, deepth, ...)
             _G.FindEntity = _FindEntity
+        else
+            return _Memory_FindPrefab(self, prefab, num, animbox, deepth, ...)
         end
     end
 
