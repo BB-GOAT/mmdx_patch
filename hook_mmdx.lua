@@ -208,125 +208,132 @@ if rawget(_G, "GetContainer_mmdxdata") then
 
     --------------------------------------------------- 修改原模组的打包带信息记录功能 ---------------------------------------------------
 
-    -- 获取模组信息内的PrefabPostInit
-    local PrefabPostInit_bundle_container = Upvaluehelper.Getmoddata("workshop-3144028272", "PrefabPostInit", "bundle_container")
-    local PrefabPostInit_gift = Upvaluehelper.Getmoddata("workshop-3144028272", "PrefabPostInit", "gift") -- 礼物
-    local PrefabPostInit_bundle = Upvaluehelper.Getmoddata("workshop-3144028272", "PrefabPostInit", "bundle") -- 捆绑物资
+    AddGamePostInit(function()
+        -- 获取模组信息内的PrefabPostInit
+        local PrefabPostInit_bundle_container = Upvaluehelper.Getmoddata("workshop-3144028272", "PrefabPostInit", "bundle_container")
+        local PrefabPostInit_gift = Upvaluehelper.Getmoddata("workshop-3144028272", "PrefabPostInit", "gift") -- 礼物
+        local PrefabPostInit_bundle = Upvaluehelper.Getmoddata("workshop-3144028272", "PrefabPostInit", "bundle") -- 捆绑物资
 
-    -- 删全局环境的PrefabPostInit
-    local modprefabinitfns = Upvaluehelper.GetUpvalue(SpawnPrefabFromSim,"modprefabinitfns")
-    local function Remove_PrefabPostInit(name, fns)
-        if not fns then return end
-
-        local postinit = modprefabinitfns[name]
-        if not postinit then return end
-
-        for i,v in pairs(postinit) do
-            local origin_fn = Upvaluehelper.GetUpvalue(v, "fn")
-            if origin_fn == fns[1] then
-                modprefabinitfns[name][i] = nil
+        -- 删全局环境的PrefabPostInit
+        local modprefabinitfns = Upvaluehelper.GetUpvalue(SpawnPrefabFromSim,"modprefabinitfns")
+        local function Remove_PrefabPostInit(name, fns)
+            if not fns then
+                print('[mmdx_patch] [Remove_PrefabPostInit] fns is nil', name, fns)
+                return
             end
-        end
-    end
 
-    Remove_PrefabPostInit("gift", PrefabPostInit_gift)
-    Remove_PrefabPostInit("bundle", PrefabPostInit_bundle)
+            local postinit = modprefabinitfns[name]
+            if not postinit then
+                print('[mmdx_patch] [Remove_PrefabPostInit] postinit is nil', name, postinit)
+                return
+            end
 
-    if enabled_showme_or_insight then -- 开启show me或者Insight
-        Remove_PrefabPostInit("bundle_container", PrefabPostInit_bundle_container) -- 记录打包带内容
-    else
-        -- 启用打包带信息记录
-        -- 打包带信息记录补丁。不理解为什么mmdx说《不算bug》
-        local newbundle
-        for k, v in pairs(Memory.prefabslist) do
-            if v.isbundle then
-                AddPrefabPostInit(k, function(self)
-                    --load data
-                    self:DoTaskInTime((2) * FRAMES, function(inst)
-                        --优先使用network的数据（最稳妥）
-                        local netdata = v.loadnetwork and Memory:LoadNetWorkData(inst)
-                        if netdata then
-                            inst.data = netdata
-                        end
-                        --首次进档，检查之前储存的数据
-                        local parent = inst.entity:GetParent()
-
-                        if parent == ThePlayer or parent and parent:HasTag("backpack") then --在人物身上
-                            local name = parent == ThePlayer and 'player' or 'backpack'
-                            local mdata = GLOBAL.mmdx_data[name]
-                            if mdata then
-                                local item, ipos = _G.INV_util:FindInInv(nil, nil, nil, function(invitem)
-                                    return invitem == inst
-                                end)
-                                if item then
-                                    local string_k = tostring(ipos)
-                                    if mdata and mdata[string_k] and mdata[string_k].prefab == inst.prefab and mdata[string_k].data then
-                                        inst.data = mdata[string_k].data
-                                        Memory:SaveNetWorkData(inst, inst.data)
-                                        return --获取到了数据就不走下面得了
-                                    end
-                                end
-                            end
-                        elseif parent then
-                            local a = Memory:GetContainer_mmdxdata(parent)
-                            local mdata = a and a.containerdata
-                            if mdata then
-                                local item, ipos = _G.INV_util:FindInCon(parent, nil, nil, nil, function(invitem)
-                                    return invitem == inst
-                                end)
-                                if item then
-                                    local string_k = tostring(ipos)
-                                    if mdata and mdata[string_k] and
-                                        (mdata[string_k].prefab == inst.prefab or mdata[string_k].prefab == v.renameprefab)
-                                        and mdata[string_k].data then
-                                        inst.data = mdata[string_k].data
-                                        Memory:SaveNetWorkData(inst, inst.data)
-                                        return --获取到了数据就不走下面得了
-                                    end
-                                end
-                            end
-                        else
-                            local data = Memory:ReadGroundData(inst, v.renameprefab)
-                            if data then
-                                inst.data = data
-                                Memory:SaveNetWorkData(inst, inst.data)
-                            end
-                        end
-                        --打包带储存道具信息 (仅修改了这部分)
-                        if v.isbundle and Memory.newbundleitems then -- 始终为true
-                            if newbundle and parent ~= nil then
-                                local name = inst:GetDisplayName()
-                                local addedprefabs = {}
-                                for kk, vv in pairs(Memory.newbundleitems) do
-                                    if not addedprefabs[vv.prefab] then
-                                        name = name .. '\n' .. vv:GetDisplayName() .. '*' .. (Memory.newbundleprefabs[vv.prefab] or 0)
-                                        addedprefabs[vv.prefab] = true
-                                    end
-                                end
-                                inst.data = { name = name, items = Memory.newbundleprefabs }
-                                Memory:SaveNetWorkData(inst, inst.data)
-                                newbundle = false
-                            end
-                        end
-                    end)
-                    self:DoTaskInTime(3 * FRAMES, function(inst)
-                        --load name
-                        inst.oldname = inst.name
-                        if inst.data and inst.data.name then
-                            inst.name = inst.data.name
-                        end
-                    end)
-                end)
+            for i,v in pairs(postinit) do
+                local origin_fn = Upvaluehelper.GetUpvalue(v, "fn")
+                if origin_fn == fns[1] then
+                    modprefabinitfns[name][i] = nil
+                end
             end
         end
 
-        --打包的时候
-        local containers = require("containers")
-        _G.MOD_util:HookFn(containers.params.bundle_container.widget.buttoninfo, "fn", function()
-            newbundle = true
-        end)
-    end
+        Remove_PrefabPostInit("gift", PrefabPostInit_gift)
+        Remove_PrefabPostInit("bundle", PrefabPostInit_bundle)
 
+        if enabled_showme_or_insight then -- 开启show me或者Insight
+            Remove_PrefabPostInit("bundle_container", PrefabPostInit_bundle_container) -- 记录打包带内容
+        else
+            -- 启用打包带信息记录
+            -- 打包带信息记录补丁。不理解为什么mmdx说《不算bug》
+            local newbundle
+            for k, v in pairs(Memory.prefabslist) do
+                if v.isbundle then
+                    AddPrefabPostInit(k, function(self)
+                        --load data
+                        self:DoTaskInTime((2) * FRAMES, function(inst)
+                            --优先使用network的数据（最稳妥）
+                            local netdata = v.loadnetwork and Memory:LoadNetWorkData(inst)
+                            if netdata then
+                                inst.data = netdata
+                            end
+                            --首次进档，检查之前储存的数据
+                            local parent = inst.entity:GetParent()
+
+                            if parent == ThePlayer or parent and parent:HasTag("backpack") then --在人物身上
+                                local name = parent == ThePlayer and 'player' or 'backpack'
+                                local mdata = GLOBAL.mmdx_data[name]
+                                if mdata then
+                                    local item, ipos = _G.INV_util:FindInInv(nil, nil, nil, function(invitem)
+                                        return invitem == inst
+                                    end)
+                                    if item then
+                                        local string_k = tostring(ipos)
+                                        if mdata and mdata[string_k] and mdata[string_k].prefab == inst.prefab and mdata[string_k].data then
+                                            inst.data = mdata[string_k].data
+                                            Memory:SaveNetWorkData(inst, inst.data)
+                                            return --获取到了数据就不走下面得了
+                                        end
+                                    end
+                                end
+                            elseif parent then
+                                local a = Memory:GetContainer_mmdxdata(parent)
+                                local mdata = a and a.containerdata
+                                if mdata then
+                                    local item, ipos = _G.INV_util:FindInCon(parent, nil, nil, nil, function(invitem)
+                                        return invitem == inst
+                                    end)
+                                    if item then
+                                        local string_k = tostring(ipos)
+                                        if mdata and mdata[string_k] and
+                                            (mdata[string_k].prefab == inst.prefab or mdata[string_k].prefab == v.renameprefab)
+                                            and mdata[string_k].data then
+                                            inst.data = mdata[string_k].data
+                                            Memory:SaveNetWorkData(inst, inst.data)
+                                            return --获取到了数据就不走下面得了
+                                        end
+                                    end
+                                end
+                            else
+                                local data = Memory:ReadGroundData(inst, v.renameprefab)
+                                if data then
+                                    inst.data = data
+                                    Memory:SaveNetWorkData(inst, inst.data)
+                                end
+                            end
+                            --打包带储存道具信息 (仅修改了这部分)
+                            if v.isbundle and Memory.newbundleitems then -- 始终为true
+                                if newbundle and parent ~= nil then
+                                    local name = inst:GetDisplayName()
+                                    local addedprefabs = {}
+                                    for kk, vv in pairs(Memory.newbundleitems) do
+                                        if not addedprefabs[vv.prefab] then
+                                            name = name .. '\n' .. vv:GetDisplayName() .. '*' .. (Memory.newbundleprefabs[vv.prefab] or 0)
+                                            addedprefabs[vv.prefab] = true
+                                        end
+                                    end
+                                    inst.data = { name = name, items = Memory.newbundleprefabs }
+                                    Memory:SaveNetWorkData(inst, inst.data)
+                                    newbundle = false
+                                end
+                            end
+                        end)
+                        self:DoTaskInTime(3 * FRAMES, function(inst)
+                            --load name
+                            inst.oldname = inst.name
+                            if inst.data and inst.data.name then
+                                inst.name = inst.data.name
+                            end
+                        end)
+                    end)
+                end
+            end
+
+            --打包的时候
+            local containers = require("containers")
+            _G.MOD_util:HookFn(containers.params.bundle_container.widget.buttoninfo, "fn", function()
+                newbundle = true
+            end)
+        end
+    end)
 end
 
 ---------------------------------------------------------------------------------------------------------------------------------------------------------
