@@ -540,6 +540,51 @@ AddComponentPostInit("playercontroller", function(self, inst)
 
         -- 修改关于晾肉架的操作
         -- 晒肉时，跳过已经有肉的架子
+        -- 限制RPC发送总次数，避免游戏将物品移至鼠标
+
+        local function drying(act) -- 是否正在晒肉
+            return act.target
+                and allowed_actions.RUMMAGE.meatrack_list[act.target.prefab]
+                and act.item and act.item:HasTag("dryable")
+        end
+        local need, sent, opening -- 需要发送的RPC次数、已发送的RPC次数、是否已打开晒肉架
+        allowed_actions['STORE'].act_pre_fn = function(act)
+            need, sent, opening = 0, 0, false
+            if drying(act) then
+                for i = 1, act.target.replica.container:GetNumSlots() do
+                    local b, s = act.target.AnimState:GetSymbolOverride("swap_dried"..i)
+                    if not (b or s) then
+                        need = need + 1
+                    end
+                end
+            end
+        end
+
+        local STORE_rpc = allowed_actions['STORE'].rpc
+        allowed_actions['STORE'].rpc = function(act)
+            if not drying(act) then return STORE_rpc(act) end
+            if INV_util:GetActiveItem() then return end
+
+            local c, used = act.target.replica.container, {}
+            if not c:IsOpenedBy(ThePlayer) then
+                if not opening then
+                    ActionQueuer:SendAction(BufferedAction(ThePlayer, act.target, ACTIONS.RUMMAGE), false, act.target)
+                    opening = true
+                end
+                return
+            end
+
+            for i = sent + 1, need do
+                local item, slot, src = INV_util:FindInInv(nil, nil, nil, function(v)
+                    return v.prefab == act.item.prefab and allowed_actions['STORE'].selectitemfn(v) and ENT_util:GetStacksize(v) > (used[v] or 0)
+                end)
+                if not item then need = sent break end
+                used[item] = (used[item] or 0) + 1
+                SendRPCToServer(src and RPC.MoveItemFromAllOfSlot or RPC.MoveInvItemFromAllOfSlot, slot, src or act.target, src and act.target or nil)
+                sent = sent + 1
+            end
+        end
+
         local STORE_breakfn = allowed_actions['STORE'].breakfn
         allowed_actions['STORE'].breakfn = function(act)
             if STORE_breakfn(act) then
