@@ -617,6 +617,21 @@ AddComponentPostInit("playercontroller", function(self, inst)
             end,
         }
 
+        -- 使用flag标记阻止重复开启容器
+        do
+            local flag
+            local old_RUMMAGE_rpc = allowed_actions['RUMMAGE'].rpc
+            allowed_actions['RUMMAGE'].rpc = function(act)
+                if flag then
+                    flag = false
+                    return old_RUMMAGE_rpc(act)
+                end
+            end
+            allowed_actions['RUMMAGE'].act_pre_fn = function(act, self)
+                flag = true
+            end
+        end
+
         local RUMMAGE_breakfn = allowed_actions['RUMMAGE'].breakfn
         allowed_actions['RUMMAGE'].breakfn = function(act)
             if RUMMAGE_breakfn(act) then
@@ -631,21 +646,6 @@ AddComponentPostInit("playercontroller", function(self, inst)
                     end
                 end
                 return not TheInput:IsKeyDown(KEY_LSHIFT) -- 所有格子都是空的 且没有按住Shift
-            end
-        end
-
-        -- 兼容【古川笠的快速采集】模组，使用flag标记阻止重复开启容器
-        if KnownModIndex:IsModEnabledAny("workshop-2158549297") then
-            local flag
-            local old_RUMMAGE_rpc = allowed_actions['RUMMAGE'].rpc
-            allowed_actions['RUMMAGE'].rpc = function(act)
-                if flag then
-                    flag = false
-                    return old_RUMMAGE_rpc(act)
-                end
-            end
-            allowed_actions['RUMMAGE'].act_pre_fn = function(act, self)
-                flag = true
             end
         end
     end
