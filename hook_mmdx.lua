@@ -268,7 +268,7 @@ if rawget(_G, "GetContainer_mmdxdata") then
 
                             if parent == ThePlayer or parent and parent:HasTag("backpack") then --在人物身上
                                 local name = parent == ThePlayer and 'player' or 'backpack'
-                                local mdata = GLOBAL.mmdx_data[name]
+                                local mdata = _G.mmdx_data[name]
                                 if mdata then
                                     local item, ipos = _G.INV_util:FindInInv(nil, nil, nil, function(invitem)
                                         return invitem == inst
@@ -399,38 +399,77 @@ end)
 if KnownModIndex:IsModEnabledAny("workshop-3136701076") then
 
 local ActionQueuer
-if GetModConfigData("aq_rpc_guard") then
-    -- Hook【黑化排队论】的 self.DropItem
-    AddClassPostConstruct("widgets/invslot", function(self)
-        local original_DropItem, fn_i, mmdx_fn = Upvaluehelper.FindUpvalue(self.DropItem, "olddrop", "/mods/workshop%-3136701076/modmain.lua")
-        if original_DropItem and fn_i and mmdx_fn then
-            local _mmdx_fn, _fn_i, _pre_fn
-            if debug.getinfo(self.DropItem, "S").source ~= "../mods/workshop-3136701076/modmain.lua" then
-                _mmdx_fn, _fn_i, _pre_fn = Upvaluehelper.FindUpvalue(self.DropItem, true, nil, function(fn) if type(fn) == "function" and debug.getinfo(fn, "S").source == "../mods/workshop-3136701076/modmain.lua" then return true end end)
-            end
-            local new_fn = function(self, wholestack)
-                local _ThePlayer_DoPeriodicTask = ThePlayer.DoPeriodicTask
-                ThePlayer.DoPeriodicTask = function(self, time, fn, initialdelay, ...)
-                    local hooked_fn = function(...)
-                        fn(...)
-                        if ActionQueuer.rpc_queue_guard then
+
+-- 覆盖【黑化排队论】的 self.DropItem   覆盖法警告！
+AddClassPostConstruct("widgets/invslot", function(self)
+    local original_DropItem, fn_i, mmdx_fn = Upvaluehelper.FindUpvalue(self.DropItem, "olddrop", "/mods/workshop%-3136701076/modmain.lua")
+    if original_DropItem and fn_i and mmdx_fn then
+        local _mmdx_fn, _fn_i, _pre_fn
+        if debug.getinfo(self.DropItem, "S").source ~= "../mods/workshop-3136701076/modmain.lua" then
+            _mmdx_fn, _fn_i, _pre_fn = Upvaluehelper.FindUpvalue(self.DropItem, true, nil, function(fn) if type(fn) == "function" and debug.getinfo(fn, "S").source == "../mods/workshop-3136701076/modmain.lua" then return true end end)
+        end
+
+        local task
+        local lastdrop = Upvaluehelper.GetUpvalue(_mmdx_fn or mmdx_fn, "lastdrop")
+        local banitem = Upvaluehelper.GetUpvalue(_mmdx_fn or mmdx_fn, "banitem")
+        local default_dropcheck_internal = Upvaluehelper.GetUpvalue(_mmdx_fn or mmdx_fn, "default_dropcheck_internal")
+
+        local function FindDropItem() -- 优先丢弃鼠标所选物品
+            local preferred = lastdrop.item
+            if not preferred then return end
+
+            return _G.INV_util:FindInInv(nil, nil, nil, function(inst)
+                return inst == preferred
+            end)
+            or _G.INV_util:FindInInv(nil, nil, nil, function(inst)
+                return inst.prefab == preferred.prefab
+                    or ActionQueuer and ActionQueuer.RegardAsSame
+                        and ActionQueuer:RegardAsSame(preferred.prefab, inst)
+            end)
+        end
+
+        local new_fn = function(self, wholestack, ...)
+            if self.owner == lastdrop.owner and self.tile == lastdrop.tile and GetTime() - lastdrop.time < default_dropcheck_internal then
+                if task then task:Cancel() end
+                if lastdrop.item and banitem[lastdrop.item.prefab] then
+                else
+                    local item = FindDropItem()
+                    task = ThePlayer:DoPeriodicTask(FRAMES, function()
+                        if not (item and item:IsValid() and ThePlayer.replica.inventory:IsHolding(item, true)) then
+                            item = FindDropItem()
+                        end
+
+                        if not item or _G.KEY_util:MoveKeyDown() then
+                            task:Cancel()
+                            task = nil
+                            return -- 提前return 原模组没有这个会发送一次无效RPC
+                        end
+
+                        SendRPCToServer(RPC.DropItemFromInvTile, item, wholestack or nil)
+
+                        if ActionQueuer and ActionQueuer.rpc_queue_guard then -- 防止RPC积压
                             ActionQueuer.rpc_queue_guard:KeepAlive()
                         end
-                    end
-                    return _ThePlayer_DoPeriodicTask(self, time, hooked_fn, initialdelay, ...)
+                    end)
+                    return
                 end
-                mmdx_fn(self, wholestack)
-                ThePlayer.DoPeriodicTask = _ThePlayer_DoPeriodicTask
             end
-
-            if _fn_i and _pre_fn then
-                debug.setupvalue(_pre_fn, _fn_i, new_fn)
-            else
-                self.DropItem = new_fn
+            if self.owner and self.owner.replica.inventory and self.tile and self.tile.item then
+                lastdrop.owner = self.owner
+                lastdrop.tile = self.tile
+                lastdrop.item = self.tile.item
+                lastdrop.time = GetTime()
             end
+            return original_DropItem(self, wholestack, ...)
         end
-    end)
-end
+
+        if _fn_i and _pre_fn then
+            debug.setupvalue(_pre_fn, _fn_i, new_fn)
+        else
+            self.DropItem = new_fn
+        end
+    end
+end)
 
 AddComponentPostInit("playercontroller", function(self, inst)
     if inst ~= ThePlayer then return end
@@ -466,11 +505,10 @@ AddComponentPostInit("playercontroller", function(self, inst)
 
     --------------------------------------------------------------------------------------------------------------------------
 
-    local env = ModManager:GetMod("workshop-3136701076").env
-    local INV_util = env.INV_util
-    local POS_util = env.POS_util
-    local ENT_util = env.ENT_util
-    local MOD_util = env.MOD_util
+    local INV_util = _G.INV_util
+    local POS_util = _G.POS_util
+    local ENT_util = _G.ENT_util
+
     local dont_controller_prefab = {
         ["luckysimulator"] = true -- 欧皇模拟器：老虎机
     }

@@ -289,3 +289,35 @@ if _G.KnownModIndex:IsModEnabledAny("workshop-3136701076") then -- 检查黑化�
         end)
     end)
 end
+
+-- Lazy Controls: 批量移动时优先继续使用双击选中的那一叠物品。
+-- batch_move_items.lua 的原实现只按同类条件搜索，因此无限堆叠箱中的同类物品
+-- 会从槽位排序靠前的那一格开始移动。
+do
+    local batch_source = "/mods/workshop%-2111412487/main/modules/batch_move_items%.lua"
+    local function IsExactItem(candidate, wanted)
+        return candidate == wanted
+    end
+
+    local classdef = require("widgets/invslot")
+    local constructor = classdef._ctor
+    local batch_fn = Upvaluehelper.FindUpvalue(constructor, "fn", batch_source)
+
+    if type(batch_fn) ~= "function" then return end
+
+    local util, util_i, util_owner = Upvaluehelper.FindUpvalue(batch_fn, "Util", batch_source)
+    if not (type(util) == "table" and type(util.GetItemFromContainers) == "function" and util_i and util_owner) then
+        MOD_util:Warning("Lazy Controls 批量移动补丁未找到物品查找函数")
+        return
+    end
+
+    local old_GetItemFromContainers = util.GetItemFromContainers
+    util.GetItemFromContainers = function(containers, item, get_all, test_fn)
+        -- 瞬移模式也只返回选中的一叠，避免同一轮同时移动其他槽位。
+        local exact_item, exact_slot, exact_container = old_GetItemFromContainers(containers, item, get_all, IsExactItem)
+        if exact_item ~= nil then
+            return exact_item, exact_slot, exact_container
+        end
+        return old_GetItemFromContainers(containers, item, get_all, test_fn)
+    end
+end
