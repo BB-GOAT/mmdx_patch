@@ -71,6 +71,14 @@ if rawget(_G, "GetContainer_mmdxdata") then
 
                     if not Memory:CanPutin(inst, item) then return end -- 检查是否可以放入
 
+                    -- 升级箱子可无限堆叠，优先使用 Show Me 或 Insight 的内容信息，避免旧缓存阻止收纳
+                    if item.replica.stackable and (inst.prefab == "treasurechest" or inst.prefab == "dragonflychest") then
+                        local bank = inst.AnimState:GetBankHash()
+                        if (bank == hash("chest_upgraded") or bank == hash("dragonfly_chest_upgraded")) and Memory:CheckShowmeAndInsight(inst, item.prefab) then
+                            return true
+                        end
+                    end
+
                     local data = Memory:GetContainer_mmdxdata(inst)
                     data = data and data.containerdata
                     if data then
