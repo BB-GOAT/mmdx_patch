@@ -9,7 +9,7 @@ description = "众所周知，【萌萌的新】有很多非常优秀的MOD，�
 author = "冰冰羊"
 
 -- 版本
-version = "2026-10-29"
+version = "2026-10-31"
 
 -- 模组加载优先级
 priority = -100010

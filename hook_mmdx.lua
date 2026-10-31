@@ -687,15 +687,6 @@ AddComponentPostInit("playercontroller", function(self, inst)
             end
         end
     end
-
-    -- 排队论工作的时候不因切屏（游戏判定为你按住了强制检查键）影响切装备
-    local _IsControlPressed = _G.TheInput.IsControlPressed
-    function _G.TheInput:IsControlPressed(key)
-        if ActionQueuer.action_thread ~= nil and (key == CONTROL_FORCE_INSPECT) then -- 排队论工作时，强制检查键按钮始终判为未按下
-            return false
-        end
-        return _IsControlPressed(self, key)
-    end
 end)
 
 end
