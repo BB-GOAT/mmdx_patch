@@ -439,7 +439,7 @@ AddClassPostConstruct("widgets/invslot", function(self)
                             item = FindDropItem()
                         end
 
-                        if not item or _G.KEY_util:MoveKeyDown() then
+                        if not item or not item:IsValid() or KEY_util:MoveKeyDown() then
                             task:Cancel()
                             task = nil
                             return -- 提前return 原模组没有这个会发送一次无效RPC
