@@ -226,13 +226,13 @@ if rawget(_G, "GetContainer_mmdxdata") then
         local modprefabinitfns = Upvaluehelper.GetUpvalue(SpawnPrefabFromSim,"modprefabinitfns")
         local function Remove_PrefabPostInit(name, fns)
             if not fns then
-                print('[mmdx_patch] [Remove_PrefabPostInit] fns is nil', name, fns)
+                -- print('[mmdx_patch] [Remove_PrefabPostInit] fns is nil', name, fns)
                 return
             end
 
             local postinit = modprefabinitfns[name]
             if not postinit then
-                print('[mmdx_patch] [Remove_PrefabPostInit] postinit is nil', name, postinit)
+                -- print('[mmdx_patch] [Remove_PrefabPostInit] postinit is nil', name, postinit)
                 return
             end
 
@@ -479,8 +479,7 @@ AddComponentPostInit("playercontroller", function(self, inst)
     -------------------------------------------------- 自动清理排队论RPC积压 --------------------------------------------------
 
     local function import_rpc_guard()
-        modimport("ActionQueuerPatch/aq_rpc_guard.lua")
-        ActionQueuer.rpc_queue_guard = CreateRPCQueueGuard(ActionQueuer)
+        ActionQueuer.rpc_queue_guard = Import(MODROOT .. "ActionQueuerPatch/aq_rpc_guard.lua")(ActionQueuer)
     end
     if TheNet:GetIsClient() and GetModConfigData("aq_rpc_guard") then
         if TheNet:GetIsServerAdmin() then
@@ -501,6 +500,12 @@ AddComponentPostInit("playercontroller", function(self, inst)
                 self.rpc_queue_guard:Finish()
             end
         end
+    end
+
+    -------------------------------------------------- 智能使用物品拆毁建筑 --------------------------------------------------
+
+    if GetModConfigData("aq_smart_destruction") then
+        ActionQueuer.smart_destruction = Import(MODROOT .. "ActionQueuerPatch/aq_smart_destruction.lua")(ActionQueuer)
     end
 
     --------------------------------------------------------------------------------------------------------------------------
@@ -535,13 +540,13 @@ AddComponentPostInit("playercontroller", function(self, inst)
         local pickup_pst_flag = false
         local _breakfn = allowed_actions["PICKUP"].breakfn
         allowed_actions["PICKUP"].breakfn = function(act)
-            local selecttable = act.self and act.self:GetSelectedEnt(act.target)
+            local selecttable = ActionQueuer:GetSelectedEnt(act.target)
             if selecttable then
-                if selecttable.rightclick then -- 右键，走原来的不可靠快速捡东西
+                if selecttable.rightclick then -- 右键，走原来的快速捡东西
                     return _breakfn(act)
                 else -- 左键，使用我写的快速捡东西
-                    local pickup_pst_anim = act.self.inst.AnimState:IsCurrentAnimation("pickup_pst")
-                    if act.time > 0.1 and (pickup_pst_anim) and pickup_pst_flag and act.self:HaveAnotherSelectedEnt(act.target) then
+                    local pickup_pst_anim = ActionQueuer.inst.AnimState:IsCurrentAnimation("pickup_pst")
+                    if act.time > 0.1 and (pickup_pst_anim) and pickup_pst_flag and ActionQueuer:HaveAnotherSelectedEnt(act.target) then
                         pickup_pst_flag = false
                         return true
                     elseif not pickup_pst_anim then

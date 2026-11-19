@@ -3,7 +3,7 @@ local FINISH_CHECK_TIME = 1.5
 local CHECK_COMMAND = "BBGOAT_FN.Clear_AQ_RPC_Hander(ThePlayer)"
 local INSTALL_COMMAND
 
-function CreateRPCQueueGuard(queuer)
+local function CreateRPCQueueGuard(queuer)
     local inst = queuer.inst
     local guard = { finish_until = 0 }
 
@@ -35,3 +35,5 @@ function CreateRPCQueueGuard(queuer)
     guard.task = inst:DoPeriodicTask(CHECK_INTERVAL, function() guard:Poll() end, CHECK_INTERVAL)
     return guard
 end
+
+return CreateRPCQueueGuard

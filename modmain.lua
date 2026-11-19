@@ -106,6 +106,14 @@ Upvaluehelper = _G.BBGOAT_utils.Upvaluehelper
 MOD_util = _G.BBGOAT_utils.MOD_util
 BBGOAT_util = _G.BBGOAT_utils.BBGOAT_util
 
+function Import(modulename, file_env)
+    local f = GLOBAL.kleiloadlua(modulename)
+    if f and type(f) == "function" then
+        GLOBAL.setfenv(f, file_env or env) -- env 表示当前模组环境
+        return f()
+    end
+end
+
 modimport("ban_print.lua") -- 关掉萌萌的新print的垃圾消息(你是话血吗)
 modimport("hook_getupvalue") -- 将萌萌的新模组里的getupvalue替换为我的版本
 modimport("hook_mmdx.lua") -- HOOK 萌萌的新的模组
